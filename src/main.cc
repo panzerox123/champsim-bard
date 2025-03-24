@@ -42,20 +42,28 @@ std::vector<phase_stats> main(environment& env, std::vector<phase_info>& phases,
 
 #ifndef CHAMPSIM_TEST_BUILD
 using configured_environment = champsim::configured::generated_environment<CHAMPSIM_BUILD>;
+configured_environment gen_environment{};
 
 const std::size_t NUM_CPUS = configured_environment::num_cpus;
 
 const unsigned BLOCK_SIZE = configured_environment::block_size;
 const unsigned PAGE_SIZE = configured_environment::page_size;
+/*
+ * These functions are for global access to common structures (because champsim does not have it by default, I guess??)
+ * */
+MEMORY_CONTROLLER& dram_ref()
+{
+    return gen_environment.dram_view();
+};
+
 #endif
+
 const unsigned LOG2_BLOCK_SIZE = champsim::lg2(BLOCK_SIZE);
 const unsigned LOG2_PAGE_SIZE = champsim::lg2(PAGE_SIZE);
 
 #ifndef CHAMPSIM_TEST_BUILD
 int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
 {
-  configured_environment gen_environment{};
-
   CLI::App app{"A microarchitecture simulator for research and education"};
 
   bool knob_cloudsuite{false};

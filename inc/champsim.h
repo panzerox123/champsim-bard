@@ -32,6 +32,16 @@ extern const unsigned PAGE_SIZE;
 extern const unsigned LOG2_BLOCK_SIZE;
 extern const unsigned LOG2_PAGE_SIZE;
 
+#ifndef CHAMPSIM_TEST_BUILD
+
+class MEMORY_CONTROLLER;
+class CACHE;
+
+MEMORY_CONTROLLER& dram_ref();
+CACHE&             llc_ref();
+
+#endif
+
 namespace champsim
 {
 struct deadlock : public std::exception {

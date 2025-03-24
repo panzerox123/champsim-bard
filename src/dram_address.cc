@@ -15,7 +15,8 @@ DRAM_ADDRESS_MAPPER::DRAM_ADDRESS_MAPPER(
         size_t bankgroups,
         size_t banks,
         size_t rows,
-        size_t columns)
+        size_t columns,
+        size_t llc_sets)
     :channels(channels),
     bankgroups(bankgroups),
     banks(banks),
@@ -24,9 +25,17 @@ DRAM_ADDRESS_MAPPER::DRAM_ADDRESS_MAPPER(
     ch_width(ilog2(channels)),
     bg_width(ilog2(bankgroups)),
     ba_width(ilog2(banks)),
-    row_width(ilog2(rows))
+    row_width(ilog2(rows)),
+    llc_sets(llc_sets),
+    llc_set_width(ilog2(llc_sets))
 {
     size_t column_width = ilog2(columns);
+
+    if (mapping_name[0] == 'p')
+    {
+        enable_permutation = true;
+        mapping_name = mapping_name.substr(1);
+    }
 
     if (mapping_name.find("mop") != std::string::npos)
     {
@@ -60,13 +69,19 @@ DRAM_ADDRESS_MAPPER::channel(champsim::address x) const
 size_t
 DRAM_ADDRESS_MAPPER::bankgroup(champsim::address x) const
 {
-    return x.slice(champsim::dynamic_extent{champsim::data::bits{bg_offset+LOG2_BLOCK_SIZE}, bg_width}).to<size_t>();
+    size_t id = x.slice(champsim::dynamic_extent{champsim::data::bits{bg_offset+LOG2_BLOCK_SIZE}, bg_width}).to<size_t>();
+    if (enable_permutation)
+        id ^= x.slice(champsim::dynamic_extent{champsim::data::bits{llc_set_width+LOG2_BLOCK_SIZE}, bg_width}).to<size_t>();
+    return id;
 }
 
 size_t
 DRAM_ADDRESS_MAPPER::bank(champsim::address x) const
 {
-    return x.slice(champsim::dynamic_extent{champsim::data::bits{ba_offset+LOG2_BLOCK_SIZE}, ba_width}).to<size_t>();
+    size_t id = x.slice(champsim::dynamic_extent{champsim::data::bits{ba_offset+LOG2_BLOCK_SIZE}, ba_width}).to<size_t>();
+    if (enable_permutation)
+        id ^= x.slice(champsim::dynamic_extent{champsim::data::bits{llc_set_width+LOG2_BLOCK_SIZE+bg_width}, ba_width}).to<size_t>();
+    return id;
 }
 
 size_t
@@ -84,6 +99,8 @@ DRAM_ADDRESS_MAPPER::bank_idx(champsim::address x) const
 void
 DRAM_ADDRESS_MAPPER::print_address_mapping() const
 {
+    std::cout << "Address mapping (perm = " << enable_permutation << ") \t";
+
     size_t n = ilog2(channels*bankgroups*banks*rows*columns);
     for (size_t i = 0; i < n; i++)
     {

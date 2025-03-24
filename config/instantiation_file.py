@@ -25,7 +25,7 @@ from . import cxx
 #pmem_fmtstr = 'champsim::chrono::picoseconds{{{clock_period_dbus}}}, champsim::chrono::picoseconds{{{clock_period_mc}}}, std::size_t{{{_tRP}}}, std::size_t{{{_tRCD}}}, std::size_t{{{_tCAS}}}, std::size_t{{{_tRAS}}}, champsim::chrono::microseconds{{{_refresh_period}}}, {{{_ulptr}}}, {rq_size}, {wq_size}, {channels}, champsim::data::bytes{{{channel_width}}}, {_bank_rows}, {_bank_columns}, {ranks}, {bankgroups}, {banks}, {_refreshes_per_period}'
 vmem_fmtstr = 'champsim::data::bytes{{{pte_page_size}}}, {num_levels}, champsim::chrono::picoseconds{{{clock_period}*{minor_fault_penalty}}}, {dram_name}, {_randomization}'
 
-pmem_fmtstr = 'champsim::chrono::picoseconds{{{clock_period_mc}}}, {{{_ulptr}}}, "{dram_type}", "{address_mapping}", {rq_size}, {wq_size}, {channels}, {bankgroups}, {banks}, {rows}, {columns}'
+pmem_fmtstr = 'champsim::chrono::picoseconds{{{clock_period_mc}}}, {{{_ulptr}}}, "{dram_type}", "{address_mapping}", {rq_size}, {wq_size}, {channels}, {bankgroups}, {banks}, {rows}, {columns}, {llc_sets}'
 
 queue_fmtstr = '{rq_size}, {pq_size}, {wq_size}, champsim::data::bits{{{_offset_bits}}}, {_queue_check_full_addr:b}'
 
@@ -336,6 +336,13 @@ def get_instantiation_lines(cores, caches, ptws, pmem, vmem, build_id):
     channels_head, channels_tail = util.cut((f'champsim::channel{{{queue_fmtstr.format(**v)}}}' for v in queues), n=-1)
     channel_instantiation_body = ('channels{', *(v+',' for v in channels_head), *channels_tail, '},')
 
+    # Need LLC data for DRAM address mapping:
+    llc_sets = -1
+    for c in caches:
+        if c['name'] == 'LLC':
+            llc_sets = int(c['sets'])
+            break
+
     pmem_instantiation_body = (
         'DRAM{',
         pmem_fmtstr.format(
@@ -350,6 +357,7 @@ def get_instantiation_lines(cores, caches, ptws, pmem, vmem, build_id):
 #           _refresh_period=int(1000*pmem['refresh_period']),
 #           _refreshes_per_period=int(pmem['refreshes_per_period']),
             _ulptr=vector_string(f'&channels.at({ul_pairs.index(v)})' for v in ul_pairs if v[0] == pmem['name']),
+            llc_sets=llc_sets,
             **pmem),
         '},'
     )

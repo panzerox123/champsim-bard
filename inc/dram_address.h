@@ -25,6 +25,8 @@ inline constexpr size_t ilog2(T x)
 class DRAM_ADDRESS_MAPPER
 {
 public:
+    bool enable_permutation =false;
+
     const size_t channels;
     const size_t bankgroups;
     const size_t banks;
@@ -35,8 +37,11 @@ private:
     size_t bg_offset, bg_width;
     size_t ba_offset, ba_width;
     size_t row_offset, row_width;
+
+    const size_t llc_sets;
+    const size_t llc_set_width;
 public:
-    DRAM_ADDRESS_MAPPER(std::string mapping_name, size_t channels, size_t bankgroups, size_t banks, size_t rows, size_t columns);
+    DRAM_ADDRESS_MAPPER(std::string mapping_name, size_t channels, size_t bankgroups, size_t banks, size_t rows, size_t columns, size_t llc_sets);
     DRAM_ADDRESS_MAPPER(const DRAM_ADDRESS_MAPPER&) =default;
 
     size_t channel(champsim::address) const;

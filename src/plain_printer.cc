@@ -130,7 +130,8 @@ std::vector<std::string> champsim::plain_printer::format(CACHE::stats_type stats
 std::vector<std::string> champsim::plain_printer::format(DRAM_CHANNEL::stats_type stats)
 {
   std::vector<std::string> lines{};
-  lines.push_back(fmt::format("{} READS: {:10}\tREAD_HITS: {:10}", stats.name, stats.reads, stats.read_row_hits));
+  lines.push_back(fmt::format("{} READ REQS: {:10}\tWRITE REQS: {:10}", stats.name, stats.read_requests, stats.write_requests));
+  lines.push_back(fmt::format("  READS: {:10}\tREAD_HITS: {:10}", stats.reads, stats.read_row_hits));
   lines.push_back(fmt::format("  WRITES: {:10}\tWRITE HITS: {:10}", stats.writes, stats.write_row_hits));
   lines.push_back(fmt::format("  ACTIVATES: {:10}\tPRECHARGES: {:10}", stats.activates, stats.precharges));
   lines.push_back(fmt::format("  WQ FULL: {:10}", stats.wq_full));

@@ -23,9 +23,10 @@ MEMORY_CONTROLLER::MEMORY_CONTROLLER(champsim::chrono::picoseconds mc_period,
         std::size_t num_bankgroups,
         std::size_t num_banks,
         std::size_t num_rows,
-        std::size_t num_columns)
+        std::size_t num_columns,
+        std::size_t llc_sets)
     :champsim::operable(mc_period),
-    address_mapper(address_mapping_name, num_channels, num_bankgroups, num_banks, num_rows, num_columns),
+    address_mapper(address_mapping_name, num_channels, num_bankgroups, num_banks, num_rows, num_columns, llc_sets),
     dram_timing(dram_type, mc_period),
     channels(num_channels, DRAM_CHANNEL(mc_period, rq_size, wq_size, num_bankgroups, num_banks, num_rows, address_mapper, dram_timing)),
     num_channels(num_channels),
@@ -70,6 +71,8 @@ MEMORY_CONTROLLER::initialize()
 #undef LIST
 
     address_mapper.print_address_mapping();
+
+    fmt::print("dram queue size: R = {} W = {} (low:high is {}:{})\n", channels[0].RQ.size(), channels[0].WQ.size(), channels[0].low_watermark, channels[0].high_watermark);
 }
 
 long
@@ -157,6 +160,7 @@ MEMORY_CONTROLLER::add_rq(const request_type& packet, champsim::channel* ul)
         if (packet.response_requested)
             rq_it->value().to_return = {&ul->returned};
 
+        ++channel.sim_stats.read_requests;
         return true;
     }
 
@@ -177,6 +181,7 @@ MEMORY_CONTROLLER::add_wq(const request_type& packet)
         wq_it->value().scheduled = false;
         wq_it->value().ready_time = current_time;
 
+        ++channel.sim_stats.write_requests;
         return true;
     }
 

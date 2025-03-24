@@ -158,7 +158,7 @@ DRAM_CHANNEL::schedule_ready_request()
 
         b.active_request.reset();
         update(b.state.pre_ok, is_read ? dram_timing.tRTP 
-                                                   : (dram_timing.CWL + dram_timing.burst + dram_timing.tWR));
+                                       : (dram_timing.CWL + dram_timing.burst + dram_timing.tWR));
 
         if (is_read)
         {
@@ -290,11 +290,11 @@ DRAM_CHANNEL::check_write_collision()
                                 return e.has_value() && (e.value().address.slice_upper(shamt) == match);
                             };
 
-            auto it = std::find_if(WQ.begin(), w_it, checker);
-            if (it == w_it)
-                it = std::find_if(std::next(w_it), WQ.end(), checker);
+            auto found = std::find_if(WQ.begin(), w_it, checker);
+            if (found == w_it)
+                found = std::find_if(std::next(w_it), WQ.end(), checker);
 
-            if (w_it != WQ.end())
+            if (found != WQ.end())
                 w_it->reset();
             else
                 w_it->value().forward_checked = true;

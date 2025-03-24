@@ -13,6 +13,9 @@ struct dram_stats
     uint64_t refresh_cycles = 0;
     unsigned WQ_ROW_BUFFER_HIT = 0, WQ_ROW_BUFFER_MISS = 0, RQ_ROW_BUFFER_HIT = 0, RQ_ROW_BUFFER_MISS = 0, WQ_FULL = 0;
     */
+    
+    uint32_t read_requests =0;
+    uint32_t write_requests =0;
 
     uint32_t reads =0;
     uint32_t writes =0;
