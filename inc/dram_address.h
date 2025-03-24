@@ -6,7 +6,7 @@
 #ifndef DRAM_ADDRESS_h
 #define DRAM_ADDRESS_h
 
-#include "champsim/address.h"
+#include "address.h"
 
 #include <cstddef>
 

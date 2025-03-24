@@ -3,7 +3,9 @@
  *  date:   24 March 2025
  * */
 
-#include "dram/address.h"
+#include "dram_address.h"
+#include "extent.h"
+#include "extent_set.h"
 
 #include <iostream>
 
@@ -26,7 +28,7 @@ DRAM_ADDRESS_MAPPER::DRAM_ADDRESS_MAPPER(
 {
     size_t column_width = ilog2(columns);
 
-    if (mapping_name.starts_with("mop"))
+    if (mapping_name.find("mop") != std::string::npos)
     {
         size_t mop_width = std::stoi(mapping_name.substr(3));
         
@@ -50,31 +52,31 @@ DRAM_ADDRESS_MAPPER::DRAM_ADDRESS_MAPPER(
 }
 
 size_t
-DRAM_ADDRESS_MAPPING::channel(champsim::address x) const
+DRAM_ADDRESS_MAPPER::channel(champsim::address x) const
 {
-    return x.slice(dynamic_extent{ch_offset+ch_width, ch_offset}).to();
+    return x.slice(champsim::dynamic_extent{champsim::data::bits{ch_offset}, ch_width}).to<size_t>();
 }
 
 size_t
-DRAM_ADDRESS_MAPPING::bankgroup(champsim::address x) const
+DRAM_ADDRESS_MAPPER::bankgroup(champsim::address x) const
 {
-    return x.slice(dynamic_extent{bg_offset+bg_width, bg_offset}).to();
+    return x.slice(champsim::dynamic_extent{champsim::data::bits{bg_offset}, bg_width}).to<size_t>();
 }
 
 size_t
-DRAM_ADDRESS_MAPPING::bank(champsim::address x) const
+DRAM_ADDRESS_MAPPER::bank(champsim::address x) const
 {
-    return x.slice(dynamic_extent{ba_offset+ba_width, ba_offset}).to();
+    return x.slice(champsim::dynamic_extent{champsim::data::bits{ba_offset}, ba_width}).to<size_t>();
 }
 
 size_t
-DRAM_ADDRESS_MAPPING::row(champsim::address x) const
+DRAM_ADDRESS_MAPPER::row(champsim::address x) const
 {
-    return x.slice(dynamic_extent{row_offset+row_width, row_offset}).to();
+    return x.slice(champsim::dynamic_extent{champsim::data::bits{row_offset}, row_width}).to<size_t>();
 }
 
 size_t
-DRAM_ADDRESS_MAPPING::bank_idx(champsim::address x) const
+DRAM_ADDRESS_MAPPER::bank_idx(champsim::address x) const
 {
-    return bankgroup(x) * banks + banks(x);
+    return bankgroup(x) * banks + bank(x);
 }

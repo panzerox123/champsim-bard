@@ -3,7 +3,7 @@
  *  date:   23 March 2025
  * */
 
-#include "dram/channel.h"
+#include "dram_channel.h"
 
 #include <cmath>
 #include <iostream>
@@ -22,7 +22,7 @@ DRAM_CHANNEL::DRAM_CHANNEL(
         std::size_t num_bankgroups,
         std::size_t num_banks,
         std::size_t num_rows,
-        const DRAM_ADDRESS_MAPPING& am,
+        const DRAM_ADDRESS_MAPPER& am,
         const DRAM_TIMING& timing)
     :champsim::operable(mc_period),
     RQ(rq_size),
@@ -53,10 +53,10 @@ DRAM_CHANNEL::find_ready_request()
         if ((is_read && current_time >= it->state.read_ok) || (!is_read && current_time >= it->state.write_ok))
         {
             DRAM_COMMAND::TYPE cmd_type = is_read ? DRAM_COMMAND::TYPE::READ : DRAM_COMMAND::TYPE::WRITE;
-            DRAM_COMMAND ready_cmd{cmd_type, req_it->value().address};
+            DRAM_COMMAND ready_cmd{req_it->value().address, cmd_type};
 
             if (out.first.type == DRAM_COMMAND::TYPE::INVALID
-                || (out.second->value().ready_time > req_it->value().ready_time()))
+                || (out.second->value().ready_time > req_it->value().ready_time))
             {
                 out = cmd_output_type{ready_cmd, req_it};
             }
@@ -128,11 +128,6 @@ DRAM_CHANNEL::find_ready_request()
     return out;
 }
 
-void update_dram_timing(champsim::chrono::clock::time_point& t, champsim::chrono::clock::duration delta)
-{
-    t = std::max(t, current_time + delta);
-}
-
 long
 DRAM_CHANNEL::schedule_ready_request()
 {
@@ -148,17 +143,24 @@ DRAM_CHANNEL::schedule_ready_request()
     size_t bg = address_mapper.bankgroup(cmd.address);
     auto& b = banks[b_idx];
 
+    auto update = [this] (champsim::chrono::clock::time_point& t, champsim::chrono::clock::duration delta)
+    {
+        t = std::max(t, this->current_time + delta);
+    };
+
+
     if (cmd.type == DRAM_COMMAND::TYPE::READ || cmd.type == DRAM_COMMAND::TYPE::WRITE)
     {
         const bool is_read = cmd.type == DRAM_COMMAND::TYPE::READ;
             
         q_it->value().scheduled = true;
-        q_it->value().ready_time = current_time + (is_read ? (dram_timing.CL + dram_timing.BL/2) 
-                                                           : (dram_timing.CWL + dram_timing.BL/2));
+        q_it->value().ready_time = current_time + (is_read ? (dram_timing.CL + dram_timing.burst) 
+                                                           : (dram_timing.CWL + dram_timing.burst));
 
         b.active_request.reset();
         b.state.next_cas_is_row_hit = true;
-        update_dram_timing(b.state.pre_ok, is_read ? tRTP : (CWL+BL/2+tWR));
+        update(b.state.pre_ok, is_read ? dram_timing.tRTP 
+                                                   : (dram_timing.CWL + dram_timing.burst + dram_timing.tWR));
     }
     else if (cmd.type == DRAM_COMMAND::TYPE::ACTIVATE)
     {
@@ -166,18 +168,18 @@ DRAM_CHANNEL::schedule_ready_request()
         b.active_request = BANK_DATA::active_entry_type{!write_mode, q_it};
         b.state.open_row = address_mapper.row(cmd.address);
 
-        update_dram_timing(b.state.read_ok, dram_timing.tRCD);
-        update_dram_timing(b.state.write_ok, dram_timing.tRCD);
-        update_dram_timing(b.state.pre_ok, dram_timing.tRAS);
+        update(b.state.read_ok, dram_timing.tRCD);
+        update(b.state.write_ok, dram_timing.tRCD);
+        update(b.state.pre_ok, dram_timing.tRAS);
 
         // Update faw:
-        faw.push_back(current_time + tFAW);
+        faw.push_back(current_time + dram_timing.tFAW);
     }
     else  // Precharge:
     {
         b.state.open_row.reset();
         b.state.next_cas_is_row_hit = false;
-        update_dram_timing(b.state.act_ok, dram_timing.tRP);
+        update(b.state.act_ok, dram_timing.tRP);
     }
 
     // Update dram bankgroup state:
@@ -191,17 +193,17 @@ DRAM_CHANNEL::schedule_ready_request()
 
             if (cmd.type == DRAM_COMMAND::TYPE::READ)
             {
-                update_dram_timing(bb.state.read_ok, same_bankgroup ? dram_timing.tCCD_L : dram_timing.tCCD_S);
-                update_dram_timing(bb.state.write_ok, dram_timing.tCCD_RTW);
+                update(bb.state.read_ok, same_bankgroup ? dram_timing.tCCD_L : dram_timing.tCCD_S);
+                update(bb.state.write_ok, dram_timing.tCCD_RTW);
             }
             else if (cmd.type == DRAM_COMMAND::TYPE::WRITE)
             {
-                update_dram_timing(bb.state.read_ok, same_bankgroup ? dram_timing.tCCD_L_WTR : dram_timing.tCCD_S_WTR);
-                update_dram_timing(bb.state.write_ok, same_bankgroup ? dram_timing.tCCD_L_WR : dram_timing.tCCD_S_WR);
+                update(bb.state.read_ok, same_bankgroup ? dram_timing.tCCD_L_WTR : dram_timing.tCCD_S_WTR);
+                update(bb.state.write_ok, same_bankgroup ? dram_timing.tCCD_L_WR : dram_timing.tCCD_S_WR);
             }
             else if (cmd.type == DRAM_COMMAND::TYPE::ACTIVATE)
             {
-                update_dram_timing(bb.state.act_ok, same_bankgroup ? dram_timing.tRRD_L : dram_timing.tRRD_S);
+                update(bb.state.act_ok, same_bankgroup ? dram_timing.tRRD_L : dram_timing.tRRD_S);
             }
             // No bankgroup timings for precharge
             ++ii;
@@ -241,13 +243,13 @@ DRAM_CHANNEL::complete_requests()
 
         if (it->value().scheduled && current_time >= it->value().ready_time)
         {
-            response_type response{r_it->value().address,
-                                    r_it->value().v_address,
-                                    r_it->value().data,
-                                    r_it->value().pf_metadata,
-                                    r_it->value().instr_depend_on_me};
+            response_type response{it->value().address,
+                                    it->value().v_address,
+                                    it->value().data,
+                                    it->value().pf_metadata,
+                                    it->value().instr_depend_on_me};
 
-            for (auto* ret : r_it->value().to_return)
+            for (auto* ret : it->value().to_return)
                 ret->push_back(response);
 
             it->reset();
@@ -266,10 +268,11 @@ DRAM_CHANNEL::check_write_collision()
         if (w_it->has_value() && !w_it->value().forward_checked)
         {
             auto address = w_it->value().address;
-            auto checker = [match=address.slice_upper(LOG2_BLOCK_OFFSET), shamt=LOG2_BLOCK_OFFSET] 
+            champsim::data::bits offset{LOG2_BLOCK_SIZE};
+            auto checker = [match=address.slice_upper(offset), shamt=offset] 
                             (const auto& e)
                             {
-                                return e.has_value() && e.value().address.slice_upper(LOG2_BLOCK_OFFSET) == address;
+                                return e.has_value() && (e.value().address.slice_upper(shamt) == match);
                             };
 
             auto it = std::find_if(WQ.begin(), w_it, checker);
@@ -289,13 +292,14 @@ DRAM_CHANNEL::check_read_collision()
 {
     for (auto r_it = RQ.begin(); r_it != RQ.end(); r_it++)
     {
-        if (r_it->has_value() && !r_it_>value().forward_checked)
+        if (r_it->has_value() && !r_it->value().forward_checked)
         {
             auto address = r_it->value().address;
-            auto checker = [match=address.slice_upper(LOG2_BLOCK_OFFSET), shamt=LOG2_BLOCK_OFFSET] 
+            champsim::data::bits offset{LOG2_BLOCK_SIZE};
+            auto checker = [match=address.slice_upper(offset), shamt=offset] 
                             (const auto& e)
                             {
-                                return e.has_value() && e.value().address.slice_upper(LOG2_BLOCK_OFFSET) == address;
+                                return e.has_value() && e.value().address.slice_upper(shamt) == match;
                             };
 
             auto it = std::find_if(WQ.begin(), WQ.end(), checker);
@@ -304,7 +308,7 @@ DRAM_CHANNEL::check_read_collision()
             {
                 response_type response{r_it->value().address,
                                        r_it->value().v_address,
-                                       wq_it->value().data,
+                                       it->value().data,
                                        r_it->value().pf_metadata,
                                        r_it->value().instr_depend_on_me};
                 for (auto* ret : r_it->value().to_return)
@@ -314,7 +318,7 @@ DRAM_CHANNEL::check_read_collision()
             }
 
             // Check for common reads
-            auto it = std::find_if(RQ.begin(), r_it, checker);
+            it = std::find_if(RQ.begin(), r_it, checker);
             if (it == r_it)
                 r_it = std::find_if(std::next(r_it), RQ.end(), checker);
 
@@ -332,7 +336,7 @@ DRAM_CHANNEL::check_read_collision()
             }
             else
             {
-                r_it->forward_checked = true;
+                r_it->value().forward_checked = true;
             }
         }
     }

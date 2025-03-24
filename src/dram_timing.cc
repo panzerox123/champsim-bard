@@ -3,11 +3,15 @@
  *  date:   24 March 2025
  * */
 
+#include "dram_timing.h"
+
+#include <iostream>
+
 DRAM_TIMING::DRAM_TIMING(std::string_view dram_type, champsim::chrono::picoseconds mc_period)
 {
     // Initialize dram timing:
-    auto ckcast = [freq=1.0/static_cast<double>(mc_period)]
-                    (double ns) { return static_cast<int>(ceil(t_ns/freq)); };
+    auto ckcast = [freq=1.0/static_cast<double>(mc_period.count())]
+                    (double t_ns) { return static_cast<int>(ceil(t_ns/freq)); };
 
     // These are nCK values: for some odd reason champsim wants to use
     // picoseconds instead :(
@@ -23,20 +27,20 @@ DRAM_TIMING::DRAM_TIMING(std::string_view dram_type, champsim::chrono::picosecon
         _tRP = 39;
         _tRCD = 39;
         _CL = 40;
-        _CWL = CL-2;
+        _CWL = _CL-2;
         _tRAS = ckcast(32.0);
         _tRTP = std::max(12, ckcast(7.5));
         _tWR = ckcast(30.0);
 
         _tCCD_S = 8;
         _tCCD_S_WR = 8;
-        _tCCD_S_WTR = CWL + BL/2 + std::max(4, ckcast(2.5));
+        _tCCD_S_WTR = _CWL + BL/2 + std::max(4, ckcast(2.5));
 
         _tCCD_L = std::max(8, ckcast(5.0));
         _tCCD_L_WR = std::max(32, ckcast(20.0));
-        _tCCD_L_WTR = CWL + BL/2 + std::max(16, ckcast(10.0));
+        _tCCD_L_WTR = _CWL + BL/2 + std::max(16, ckcast(10.0));
 
-        _tCCD_RTW = (CL-CWL) + BL/2 + 4;
+        _tCCD_RTW = (_CL-_CWL) + BL/2 + 4;
 
         _tRRD_S = 8;
         _tRRD_L = std::max(8, ckcast(5.0));
@@ -56,16 +60,16 @@ DRAM_TIMING::DRAM_TIMING(std::string_view dram_type, champsim::chrono::picosecon
 
         _tCCD_S = 4;
         _tCCD_S_WR = 4;
-        _tCCD_S_WTR = CWL + BL/2 + std::max(4, ckcast(7.5));
+        _tCCD_S_WTR = _CWL + BL/2 + std::max(4, ckcast(7.5));
         
-        _tCCD_L = tCCD_S;
-        _tCCD_L_WR = tCCD_S_WR;
-        _tCCD_L_WTR = tCCD_S_WTR;
+        _tCCD_L = _tCCD_S;
+        _tCCD_L_WR = _tCCD_S_WR;
+        _tCCD_L_WTR = _tCCD_S_WTR;
 
-        _tCCD_RTW = (CL-CWL) + BL/2 + 1;
+        _tCCD_RTW = (_CL-_CWL) + BL/2 + 1;
         
         _tRRD_S = std::max(4, ckcast(7.5));
-        _tRRD_L = tRRD_S;
+        _tRRD_L = _tRRD_S;
         _tFAW = ckcast(20.0);
     }
     else
@@ -77,6 +81,7 @@ DRAM_TIMING::DRAM_TIMING(std::string_view dram_type, champsim::chrono::picosecon
     // Convert all nCK values to picoseconds:
     auto pscast = [p=mc_period] (int tck) { return tck * p; };
 
+    burst = pscast(BL/2);
     tRP = pscast(_tRP);
     tRCD = pscast(_tRCD);
     CL = pscast(_CL);
@@ -99,6 +104,6 @@ DRAM_TIMING::DRAM_TIMING(std::string_view dram_type, champsim::chrono::picosecon
     tRRD_L = pscast(_tRRD_L);
     tFAW = pscast(_tFAW);
 
-    tRFC = 410'000;
-    tREFI = 3'906'250;  // 32e6 / 8192 (this is ns -- converted to ps in value).
+    tRFC = champsim::chrono::clock::duration{410'000};
+    tREFI = champsim::chrono::clock::duration{3'906'250};  // 32e6 / 8192 (this is ns -- converted to ps in value).
 }

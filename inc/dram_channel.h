@@ -9,7 +9,10 @@
 #include "address.h"
 #include "channel.h"
 #include "chrono.h"
-#include "dram/address.h"
+#include "dram_address.h"
+#include "dram_stats.h"
+#include "dram_timing.h"
+#include "operable.h"
 
 #include <array>
 #include <cstdint>
@@ -63,7 +66,7 @@ struct DRAM_CHANNEL final : public champsim::operable
         explicit request_type(const typename champsim::channel::request_type& req);
     };
     using value_type = request_type;
-    using queue_type = std::vector<std::optional<value_type>;
+    using queue_type = std::vector<std::optional<value_type>>;
     using cmd_output_type = std::pair<DRAM_COMMAND, queue_type::iterator>;
     using stats_type = dram_stats;
 
@@ -82,7 +85,7 @@ struct DRAM_CHANNEL final : public champsim::operable
 
     std::vector<BANK_DATA> banks{};
     std::deque<champsim::chrono::clock::time_point> faw{};
-    champsim::chrono::clock::time_point last_ref_cycle =0;
+    champsim::chrono::clock::time_point last_ref_cycle{};
 
     stats_type roi_stats, sim_stats;
 
@@ -110,9 +113,9 @@ public:
     void check_read_collision();
     void update_read_write_priority(void);
 
-    void initialize() final {}
-    void begin_phase() final {}
-    void end_phase(unsigned cpu) final { roi_stats = sim_stats; }
+    void initialize() {}
+    void begin_phase() {}
+    void end_phase(unsigned cpu) { roi_stats = sim_stats; }
 
     long operate() final;
     void print_deadlock() final;

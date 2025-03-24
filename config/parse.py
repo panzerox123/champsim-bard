@@ -36,12 +36,9 @@ ptw_deprecation_keys = {
 }
 
 pmem_deprecation_keys = {
-    'columns': 'bank_columns',
-    'rows': 'bank_rows'
 }
 
 pmem_deprecation_warnings = {
-    'columns': 'Set "bank_columns" to "columns" * 8'
 }
 
 def executable_name(*config_list):
@@ -276,13 +273,6 @@ class NormalizedConfiguration:
         self.caches = {k:v for k,v in self.caches.items() if k != 'DRAM'}
 
         self.pmem = config_file.get('physical_memory', {})
-        
-        #this allows frequency to be specified instead of data rate or vice-versa for DRAM
-        if('frequency' in self.pmem.keys()):
-            self.pmem['data_rate'] = self.pmem['frequency']
-            self.pmem['frequency'] = self.pmem['frequency']/2
-        elif('data_rate' in self.pmem.keys()):
-            self.pmem['frequency'] = self.pmem['data_rate']/2
 
         if verbose:
             print('P: pmem', list(self.pmem.keys()))
@@ -329,9 +319,8 @@ class NormalizedConfiguration:
         )
 
         pmem = util.chain(self.pmem, {
-            'name': 'DRAM', 'data_rate': 3200, 'frequency': 1600, 'channels': 1, 'ranks': 1, 'bankgroups': 8, 'banks': 4, 'bank_rows': 65536, 'bank_columns': 1024,
-            'channel_width': 8, 'wq_size': 64, 'rq_size': 64, 'tRP': 24, 'tRCD': 24, 'tCAS': 24, 'tRAS' : 52,
-            'refresh_period': 32, 'refreshes_per_period': 8192
+            'name': 'DRAM', 'frequency': 2400, 'channels': 2, 'ranks': 1, 'bankgroups': 8, 'banks': 4, 'rows': 65536, 'columns': 128,
+            'dram_type': '4800', 'address_mapping': 'zen', 'wq_size': 64, 'rq_size': 64
         })
         pmem = util.chain(pmem,(do_deprecation(pmem, pmem_deprecation_keys,pmem_deprecation_warnings)))
         
