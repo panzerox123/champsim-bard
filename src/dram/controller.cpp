@@ -71,7 +71,7 @@ MEMORY_CONTROLLER::operate()
 
     initiate_requests();
     for (auto ch : channels)
-        progress += ch->_operate();
+        progress += ch._operate();
     
     return progress;
 }
@@ -83,8 +83,8 @@ MEMORY_CONTROLLER::begin_phase()
     {
         DRAM_CHANNEL::stats_type new_stats;
         new_stats.name = "Channel " + std::to_string(i);
-        channels[i]->sim_stats = new_stats;
-        channels[i]->warmup = warmup;
+        channels[i].sim_stats = new_stats;
+        channels[i].warmup = warmup;
     }
 
     for (auto* ul : queues)
@@ -100,14 +100,14 @@ void
 MEMORY_CONTROLLER::end_phase(unsigned cpu)
 {
     for (auto& chan : channels)
-        chan->end_phase(cpu);
+        chan.end_phase(cpu);
 }
 
 void
 MEMORY_CONTROLLER::print_deadlock()
 {
     for (auto& chan : channels)
-        chan->print_deadlock();
+        chan.print_deadlock();
 }
 
 void
@@ -133,7 +133,7 @@ MEMORY_CONTROLLER::add_rq(const request_type& pkt, champsim::channel* ul)
 {
     auto& channel = channels[address_mapping.get_channel(packet.address)];
 
-    auto rq_it = std::find_if_not(std::begin(channel->RQ), std::end(channel->RQ), [] (const auto& pkt) { return pkt.has_value(); });
+    auto rq_it = std::find_if_not(std::begin(channel.RQ), std::end(channel.RQ), [] (const auto& pkt) { return pkt.has_value(); });
     if (rq_it != std::end(channel->RQ))
     {
         *rq_it = DRAM_CHANNEL::request_type{packet};
@@ -155,8 +155,8 @@ MEMORY_CONTROLLER::add_wq(const request_type& pkt)
     auto& channel = channels[address_mapping.get_channel(packet.address)];
 
     // search for the empty index
-    auto wq_it = std::find_if_not(std::begin(channel->WQ), std::end(channel->WQ), [](const auto& pkt) { return pkt.has_value(); }
-    if (wq_it != std::end(channel->WQ))
+    auto wq_it = std::find_if_not(std::begin(channel.WQ), std::end(channel.WQ), [](const auto& pkt) { return pkt.has_value(); }
+    if (wq_it != std::end(channel.WQ))
     {
         *wq_it = DRAM_CHANNEL::request_type{packet};
         wq_it->value().forward_checked = false;
@@ -166,6 +166,6 @@ MEMORY_CONTROLLER::add_wq(const request_type& pkt)
         return true;
     }
 
-    ++channel->sim_stats.WQ_FULL;
+    ++channel.sim_stats.WQ_FULL;
     return false;
 }
