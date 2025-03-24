@@ -1,0 +1,121 @@
+/*
+ *  author: Suhas Vittal
+ *  date:   23 March 2025
+ * */
+
+#ifndef DRAM_CHANNEL_h
+#define DRAM_CHANNEL_h
+
+#include "address.h"
+#include "channel.h"
+#include "chrono.h"
+#include "dram/address.h"
+
+#include <array>
+#include <cstdint>
+#include <cstddef>
+#include <optional>
+#include <utility>
+#include <vector>
+
+struct DRAM_COMMAND
+{
+    enum class TYPE { INVALID, READ, WRITE, ACTIVATE, PRECHARGE };
+
+    champsim::address address;
+    TYPE              type =TYPE::INVALID;
+
+    bool autopre =false;
+};
+
+struct DRAM_BANK_STATE
+{
+    std::optional<std::size_t> open_row{};
+
+    champsim::chrono::clock::time_point act_ok{};
+    champsim::chrono::clock::time_point pre_ok{};
+    champsim::chrono::clock::time_point read_ok{};
+    champsim::chrono::clock::time_point write_ok{};
+
+    bool next_cas_is_row_hit =false;
+};
+
+struct DRAM_CHANNEL final : public champsim::operable
+{
+    using response_type = typename champsim::channel::response_type;
+    struct request_type
+    {
+        bool scheduled = false;
+        bool forward_checked = false;
+
+        uint8_t asid[2] = {std::numeric_limits<uint8_t>::max(), std::numeric_limits<uint8_t>::max()};
+
+        uint32_t pf_metadata = 0;
+
+        champsim::address address{};
+        champsim::address v_address{};
+        champsim::address data{};
+        champsim::chrono::clock::time_point ready_time = champsim::chrono::clock::time_point::max();
+
+        std::vector<uint64_t> instr_depend_on_me{};
+        std::vector<std::deque<response_type>*> to_return{};
+
+        explicit request_type(const typename champsim::channel::request_type& req);
+    };
+    using value_type = request_type;
+    using queue_type = std::vector<std::optional<value_type>;
+    using cmd_output_type = std::pair<DRAM_COMMAND, queue_type::iterator>;
+    using stats_type = dram_stats;
+
+    struct BANK_DATA
+    {
+        using active_entry_type = std::pair<bool, queue_type::iterator>;  // is_read, iterator
+
+        DRAM_BANK_STATE                  state{};
+        std::optional<active_entry_type> active_request{};
+    };
+    
+    queue_type RQ;
+    queue_type WQ;
+
+    bool write_mode =false;
+
+    std::vector<BANK_DATA> banks{};
+    std::deque<champsim::chrono::clock::time_point> faw{};
+    champsim::chrono::clock::time_point last_ref_cycle =0;
+
+    stats_type roi_stats, sim_stats;
+
+    const std::size_t low_watermark;
+    const std::size_t high_watermark;
+
+    const size_t num_bankgroups;
+    const size_t num_banks;
+    const size_t num_rows;
+private:
+    DRAM_ADDRESS_MAPPER address_mapper;
+    DRAM_TIMING         dram_timing;
+public:
+    DRAM_CHANNEL(champsim::chrono::picoseconds mc_period,
+                std::size_t rq_size, std::size_t wq_size,
+                std::size_t num_bankgroups, std::size_t num_banks, std::size_t num_rows,
+                const DRAM_ADDRESS_MAPPER&, const DRAM_TIMING&);
+
+    cmd_output_type find_ready_request(void);
+    long schedule_ready_request(void);
+    long handle_refresh();
+    long complete_requests();
+
+    void check_write_collision();
+    void check_read_collision();
+    void update_read_write_priority(void);
+
+    void initialize() final {}
+    void begin_phase() final {}
+    void end_phase(unsigned cpu) final { roi_stats = sim_stats; }
+
+    long operate() final;
+    void print_deadlock() final;
+};
+
+#endif   // DRAM_CHANNEL_h
