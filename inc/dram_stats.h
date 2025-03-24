@@ -14,10 +14,15 @@ struct dram_stats
     unsigned WQ_ROW_BUFFER_HIT = 0, WQ_ROW_BUFFER_MISS = 0, RQ_ROW_BUFFER_HIT = 0, RQ_ROW_BUFFER_MISS = 0, WQ_FULL = 0;
     */
 
-    uint32_t reads;
-    uint32_t writes;
-    uint32_t activates;
-    uint32_t precharges;
+    uint32_t reads =0;
+    uint32_t writes =0;
+    uint32_t activates =0;
+    uint32_t precharges =0;
+    
+    uint32_t read_row_hits =0;
+    uint32_t write_row_hits =0;
+
+    uint64_t wq_full =0;
 };
 
 dram_stats operator-(dram_stats lhs, dram_stats rhs);

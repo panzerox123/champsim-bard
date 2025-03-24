@@ -45,6 +45,8 @@ public:
     size_t row(champsim::address) const;
 
     size_t bank_idx(champsim::address) const;
+
+    void print_address_mapping() const;
 };
 
 #endif  // DRAM_ADDRESS_h

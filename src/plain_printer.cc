@@ -130,17 +130,10 @@ std::vector<std::string> champsim::plain_printer::format(CACHE::stats_type stats
 std::vector<std::string> champsim::plain_printer::format(DRAM_CHANNEL::stats_type stats)
 {
   std::vector<std::string> lines{};
-  lines.push_back(fmt::format("{} RQ ROW_BUFFER_HIT: {:10}", stats.name, stats.RQ_ROW_BUFFER_HIT));
-  lines.push_back(fmt::format("  ROW_BUFFER_MISS: {:10}", stats.RQ_ROW_BUFFER_MISS));
-  lines.push_back(fmt::format("  AVG DBUS CONGESTED CYCLE: {}", ::print_ratio(stats.dbus_cycle_congested, stats.dbus_count_congested)));
-  lines.push_back(fmt::format("{} WQ ROW_BUFFER_HIT: {:10}", stats.name, stats.WQ_ROW_BUFFER_HIT));
-  lines.push_back(fmt::format("  ROW_BUFFER_MISS: {:10}", stats.WQ_ROW_BUFFER_MISS));
-  lines.push_back(fmt::format("  FULL: {:10}", stats.WQ_FULL));
-
-  if (stats.refresh_cycles > 0)
-    lines.push_back(fmt::format("{} REFRESHES ISSUED: {:10}", stats.name, stats.refresh_cycles));
-  else
-    lines.push_back(fmt::format("{} REFRESHES ISSUED: -", stats.name));
+  lines.push_back(fmt::format("{} READS: {:10}\tREAD_HITS: {:10}", stats.name, stats.reads, stats.read_row_hits));
+  lines.push_back(fmt::format("  WRITES: {:10}\tWRITE HITS: {:10}", stats.writes, stats.write_row_hits));
+  lines.push_back(fmt::format("  ACTIVATES: {:10}\tPRECHARGES: {:10}", stats.activates, stats.precharges));
+  lines.push_back(fmt::format("  WQ FULL: {:10}", stats.wq_full));
 
   return lines;
 }

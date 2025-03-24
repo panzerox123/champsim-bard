@@ -2,12 +2,12 @@
 
 dram_stats operator-(dram_stats lhs, dram_stats rhs)
 {
-  lhs.dbus_cycle_congested -= rhs.dbus_cycle_congested;
-  lhs.dbus_count_congested -= rhs.dbus_count_congested;
-  lhs.WQ_ROW_BUFFER_HIT -= rhs.WQ_ROW_BUFFER_HIT;
-  lhs.WQ_ROW_BUFFER_MISS -= rhs.WQ_ROW_BUFFER_MISS;
-  lhs.RQ_ROW_BUFFER_HIT -= rhs.RQ_ROW_BUFFER_HIT;
-  lhs.RQ_ROW_BUFFER_MISS -= rhs.RQ_ROW_BUFFER_MISS;
-  lhs.WQ_FULL -= rhs.WQ_FULL;
-  return lhs;
+    lhs.reads -= rhs.reads;
+    lhs.writes -= rhs.writes;
+    lhs.activates -= rhs.activates;
+    lhs.precharges -= rhs.precharges;
+    lhs.read_row_hits -= rhs.read_row_hits;
+    lhs.write_row_hits -= rhs.write_row_hits;
+    lhs.wq_full -= rhs.wq_full;
+    return lhs;
 }

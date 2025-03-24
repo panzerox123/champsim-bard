@@ -148,7 +148,6 @@ DRAM_CHANNEL::schedule_ready_request()
         t = std::max(t, this->current_time + delta);
     };
 
-
     if (cmd.type == DRAM_COMMAND::TYPE::READ || cmd.type == DRAM_COMMAND::TYPE::WRITE)
     {
         const bool is_read = cmd.type == DRAM_COMMAND::TYPE::READ;
@@ -158,9 +157,21 @@ DRAM_CHANNEL::schedule_ready_request()
                                                            : (dram_timing.CWL + dram_timing.burst));
 
         b.active_request.reset();
-        b.state.next_cas_is_row_hit = true;
         update(b.state.pre_ok, is_read ? dram_timing.tRTP 
                                                    : (dram_timing.CWL + dram_timing.burst + dram_timing.tWR));
+
+        if (is_read)
+        {
+            ++sim_stats.reads;
+            sim_stats.read_row_hits += b.state.next_cas_is_row_hit;
+        }
+        else
+        {
+            ++sim_stats.writes;
+            sim_stats.write_row_hits += b.state.next_cas_is_row_hit;
+        }
+
+        b.state.next_cas_is_row_hit = true;
     }
     else if (cmd.type == DRAM_COMMAND::TYPE::ACTIVATE)
     {
@@ -174,12 +185,16 @@ DRAM_CHANNEL::schedule_ready_request()
 
         // Update faw:
         faw.push_back(current_time + dram_timing.tFAW);
+
+        ++sim_stats.activates;
     }
     else  // Precharge:
     {
         b.state.open_row.reset();
         b.state.next_cas_is_row_hit = false;
         update(b.state.act_ok, dram_timing.tRP);
+
+        ++sim_stats.precharges;
     }
 
     // Update dram bankgroup state:

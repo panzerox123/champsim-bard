@@ -54,29 +54,49 @@ DRAM_ADDRESS_MAPPER::DRAM_ADDRESS_MAPPER(
 size_t
 DRAM_ADDRESS_MAPPER::channel(champsim::address x) const
 {
-    return x.slice(champsim::dynamic_extent{champsim::data::bits{ch_offset}, ch_width}).to<size_t>();
+    return x.slice(champsim::dynamic_extent{champsim::data::bits{ch_offset+LOG2_BLOCK_SIZE}, ch_width}).to<size_t>();
 }
 
 size_t
 DRAM_ADDRESS_MAPPER::bankgroup(champsim::address x) const
 {
-    return x.slice(champsim::dynamic_extent{champsim::data::bits{bg_offset}, bg_width}).to<size_t>();
+    return x.slice(champsim::dynamic_extent{champsim::data::bits{bg_offset+LOG2_BLOCK_SIZE}, bg_width}).to<size_t>();
 }
 
 size_t
 DRAM_ADDRESS_MAPPER::bank(champsim::address x) const
 {
-    return x.slice(champsim::dynamic_extent{champsim::data::bits{ba_offset}, ba_width}).to<size_t>();
+    return x.slice(champsim::dynamic_extent{champsim::data::bits{ba_offset+LOG2_BLOCK_SIZE}, ba_width}).to<size_t>();
 }
 
 size_t
 DRAM_ADDRESS_MAPPER::row(champsim::address x) const
 {
-    return x.slice(champsim::dynamic_extent{champsim::data::bits{row_offset}, row_width}).to<size_t>();
+    return x.slice(champsim::dynamic_extent{champsim::data::bits{row_offset+LOG2_BLOCK_SIZE}, row_width}).to<size_t>();
 }
 
 size_t
 DRAM_ADDRESS_MAPPER::bank_idx(champsim::address x) const
 {
     return bankgroup(x) * banks + bank(x);
+}
+
+void
+DRAM_ADDRESS_MAPPER::print_address_mapping() const
+{
+    size_t n = ilog2(channels*bankgroups*banks*rows*columns);
+    for (size_t i = 0; i < n; i++)
+    {
+        if (i >= ch_offset && i < ch_offset+ch_width)
+            std::cout << "ch ";
+        else if (i >= bg_offset && i < bg_offset+bg_width)
+            std::cout << "bg ";
+        else if (i >= ba_offset && i < ba_offset+ba_width)
+            std::cout << "ba ";
+        else if (i >= row_offset && i < row_offset+row_width)
+            std::cout << "ro ";
+        else
+            std::cout << "co ";
+    }
+    std::cout << "\n";
 }

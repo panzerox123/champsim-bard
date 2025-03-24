@@ -68,6 +68,8 @@ MEMORY_CONTROLLER::initialize()
     LIST(tFAW);
 
 #undef LIST
+
+    address_mapper.print_address_mapping();
 }
 
 long
@@ -178,6 +180,6 @@ MEMORY_CONTROLLER::add_wq(const request_type& packet)
         return true;
     }
 
-    ++channel.sim_stats.WQ_FULL;
+    ++channel.sim_stats.wq_full;
     return false;
 }
