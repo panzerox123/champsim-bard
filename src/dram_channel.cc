@@ -302,35 +302,36 @@ DRAM_CHANNEL::check_read_collision()
                                 return e.has_value() && e.value().address.slice_upper(shamt) == match;
                             };
 
-            auto it = std::find_if(WQ.begin(), WQ.end(), checker);
+            auto found = std::find_if(WQ.begin(), WQ.end(), checker);
             // Forward write:
-            if (it != WQ.end())
+            if (found != WQ.end())
             {
                 response_type response{r_it->value().address,
                                        r_it->value().v_address,
-                                       it->value().data,
+                                       found->value().data,
                                        r_it->value().pf_metadata,
                                        r_it->value().instr_depend_on_me};
                 for (auto* ret : r_it->value().to_return)
                     ret->push_back(response);
 
                 r_it->reset();
+                continue;
             }
 
             // Check for common reads
-            it = std::find_if(RQ.begin(), r_it, checker);
-            if (it == r_it)
-                r_it = std::find_if(std::next(r_it), RQ.end(), checker);
+            found = std::find_if(RQ.begin(), r_it, checker);
+            if (found == r_it)
+                found = std::find_if(std::next(r_it), RQ.end(), checker);
 
-            if (it != RQ.end())
+            if (found != RQ.end())
             {
-                auto instr_copy = std::move(it->value().instr_depend_on_me);
-                auto ret_copy = std::move(it->value().to_return);
+                auto instr_copy = std::move(found->value().instr_depend_on_me);
+                auto ret_copy = std::move(found->value().to_return);
 
                 std::set_union(std::begin(instr_copy), std::end(instr_copy), std::begin(r_it->value().instr_depend_on_me), std::end(r_it->value().instr_depend_on_me),
-                               std::back_inserter(it->value().instr_depend_on_me));
+                               std::back_inserter(found->value().instr_depend_on_me));
                 std::set_union(std::begin(ret_copy), std::end(ret_copy), std::begin(r_it->value().to_return), std::end(r_it->value().to_return),
-                               std::back_inserter(it->value().to_return));
+                               std::back_inserter(found->value().to_return));
 
                 r_it->reset();
             }

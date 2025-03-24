@@ -10,8 +10,8 @@
 DRAM_TIMING::DRAM_TIMING(std::string_view dram_type, champsim::chrono::picoseconds mc_period)
 {
     // Initialize dram timing:
-    auto ckcast = [freq=1.0/static_cast<double>(mc_period.count())]
-                    (double t_ns) { return static_cast<int>(ceil(t_ns/freq)); };
+    auto ckcast = [mc_period]
+                    (double t_ns) { return static_cast<int>(ceil( (t_ns*1e3) / static_cast<double>(mc_period.count()) )); };
 
     // These are nCK values: for some odd reason champsim wants to use
     // picoseconds instead :(

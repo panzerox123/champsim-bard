@@ -44,7 +44,7 @@ MEMORY_CONTROLLER::initialize()
         fmt::print("{} :\t {} ns\n", name, t.count() * 1e-3);
     };
 
-#define LIST(x) list_timing("#x", dram_timing.x)
+#define LIST(x) list_timing(#x, dram_timing.x)
 
     LIST(CL);
     LIST(CWL);
@@ -76,7 +76,7 @@ MEMORY_CONTROLLER::operate()
     long progress{0};
 
     initiate_requests();
-    for (auto ch : channels)
+    for (auto& ch : channels)
         progress += ch._operate();
     
     return progress;
