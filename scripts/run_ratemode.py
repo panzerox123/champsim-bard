@@ -9,4 +9,4 @@ inst_sim = int(argv[5])
 
 trace_part = ' '.join([trace for _ in range(rate)])
 
-os.system(f'source ~/.bashrc && bin/{exec} {trace_part} --warmup-instructions {inst_warmup} --simulation-instructions {inst_sim}')
+os.system(f'bin/{exec} {trace_part} --warmup-instructions {inst_warmup} --simulation-instructions {inst_sim}')

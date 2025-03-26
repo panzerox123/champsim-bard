@@ -14,7 +14,8 @@ wlru::wlru(CACHE* cache, long sets, long ways)
     :replacement(cache),
     NUM_WAYS(ways),
     last_used_cycles(static_cast<std::size_t>(sets * ways), 0),
-    address_mapper("pzen", 2, 8, 4, 65536, 128, sets),
+    address_mapper(cache->dram->address_mapper),
+    bank_writeback_done(cache->dram->num_channels, std::vector<bool>(cache->dram->num_bankgroups*cache->dram->num_banks, false)),
     lookup_sel(ways, SEL_INIT),
     test_eviction_pos(static_cast<std::size_t>(sets*ways), -1),
     set_modulus(sets / NUM_SAMPLED_SETS),
@@ -24,8 +25,8 @@ wlru::wlru(CACHE* cache, long sets, long ways)
 void
 wlru::initialize_replacement()
 {
-    size_t tot_banks = 32;
-    bank_writeback_done = std::vector<std::vector<bool>>(2, std::vector<bool>(tot_banks, false));
+    size_t tot_banks = address_mapper.bankgroups*address_mapper.banks;
+    bank_writeback_done = std::vector<std::vector<bool>>(address_mapper.channels, std::vector<bool>(tot_banks, false));
 }
 
 long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, const champsim::cache_block* current_set, champsim::address ip,

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define IDEAL_BRANCH_PREDICTOR
+
 #include "ooo_cpu.h"
 
 #include <algorithm>
@@ -160,6 +162,7 @@ bool O3_CPU::do_predict_branch(ooo_model_instr& arch_instr)
   }
 
   if (arch_instr.is_branch) {
+    /*
     if constexpr (champsim::debug_print) {
       fmt::print("[BRANCH] instr_id: {} ip: {} taken: {}\n", arch_instr.instr_id, arch_instr.ip, arch_instr.branch_taken);
     }
@@ -169,7 +172,8 @@ bool O3_CPU::do_predict_branch(ooo_model_instr& arch_instr)
 
     if (predicted_branch_target != arch_instr.branch_target
         || (((arch_instr.branch == BRANCH_CONDITIONAL) || (arch_instr.branch == BRANCH_OTHER))
-            && arch_instr.branch_taken != arch_instr.branch_prediction)) { // conditional branches are re-evaluated at decode when the target is computed
+            && arch_instr.branch_taken != arch_instr.branch_prediction))
+    { // conditional branches are re-evaluated at decode when the target is computed
       sim_stats.total_rob_occupancy_at_branch_mispredict += std::size(ROB);
       sim_stats.branch_type_misses.increment(arch_instr.branch);
       if (!warmup) {
@@ -180,6 +184,8 @@ bool O3_CPU::do_predict_branch(ooo_model_instr& arch_instr)
     } else {
       stop_fetch = arch_instr.branch_taken; // if correctly predicted taken, then we can't fetch anymore instructions this cycle
     }
+    */
+    stop_fetch = arch_instr.branch_taken; // if correctly predicted taken, then we can't fetch anymore instructions this cycle
 
     impl_update_btb(arch_instr.ip, arch_instr.branch_target, arch_instr.branch_taken, arch_instr.branch);
     impl_last_branch_result(arch_instr.ip, arch_instr.branch_target, arch_instr.branch_taken, arch_instr.branch);

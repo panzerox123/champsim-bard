@@ -1,7 +1,7 @@
 {
     "executable_name": "wcache",
     "block_size": 64,
-    "page_size": 4096,
+    "page_size": 2097152,
     "heartbeat_frequency": 10000000,
     "num_cores": 8,
 
@@ -127,14 +127,12 @@
     },
 
 	"PTW": {
-		"pscl5_set": 1,
-		"pscl5_way": 2,
 		"pscl4_set": 1,
-		"pscl4_way": 4,
-		"pscl3_set": 2,
+		"pscl4_way": 2,
+		"pscl3_set": 1,
 		"pscl3_way": 4,
-		"pscl2_set": 4,
-		"pscl2_way": 8,
+		"pscl2_set": 2,
+		"pscl2_way": 4,
 		"rq_size": 16,
 		"mshr_size": 5,
 		"max_read": 2,
@@ -174,10 +172,9 @@
 
     "virtual_memory": {
         "pte_page_size": 4096,
-        "num_levels": 5,
+        "num_levels": 4,
         "minor_fault_penalty": 200,
         "randomization": 1
     }
 }
-
 

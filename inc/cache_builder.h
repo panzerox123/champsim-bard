@@ -29,6 +29,8 @@
 #include "util/bits.h"
 #include "util/to_underlying.h"
 
+#include "dram_controller.h"
+
 class CACHE;
 namespace champsim
 {
@@ -62,6 +64,8 @@ struct cache_builder_base {
   std::vector<champsim::channel*> m_uls{};
   champsim::channel* m_ll{};
   champsim::channel* m_lt{nullptr};
+
+  MEMORY_CONTROLLER* m_dram;
 };
 } // namespace detail
 
@@ -244,6 +248,11 @@ public:
    */
   template <typename... Rs>
   cache_builder<P, cache_builder_module_type_holder<Rs...>> replacement();
+
+  /*
+   * Specify the DRAM ptr (if there is one)
+   * */
+  self_type& dram(MEMORY_CONTROLLER*);
 };
 } // namespace champsim
 
@@ -512,6 +521,13 @@ auto champsim::cache_builder<P, R>::lower_translate(champsim::channel* lt_) -> s
 {
   m_lt = lt_;
   return *this;
+}
+
+template <typename P, typename R>
+auto champsim::cache_builder<P,R>::dram(MEMORY_CONTROLLER* d_p) -> self_type&
+{
+    m_dram = d_p;
+    return *this;
 }
 
 template <typename P, typename R>
