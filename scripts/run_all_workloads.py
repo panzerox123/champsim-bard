@@ -32,4 +32,5 @@ for suite in SUITES:
         name = get_name(trace, suite)
         trace_filepath = f'{trace_folder}/{trace}'
 
-        print(f'python scripts/run_ratemode.py {build} {trace_filepath} {rate} {INST_WARMUP} {INST_SIM} > {output_folder}/{name}.out')
+        trace_part = ' '.join([trace_filepath for _ in range(rate)])
+        print(f'g++ -v && ./bin/{build} {trace_part} --warmup-instructions {INST_WARMUP} --simulation-instructions {INST_SIM} > {output_folder}/{name}.out &')

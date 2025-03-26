@@ -127,7 +127,7 @@ public:
 
     void initialize() {}
     void begin_phase() {}
-    void end_phase(unsigned cpu) { roi_stats = sim_stats; }
+    void end_phase(unsigned) { roi_stats = sim_stats; }
 
     long operate() final;
     void print_deadlock() final;

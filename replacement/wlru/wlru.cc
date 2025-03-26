@@ -14,6 +14,7 @@ wlru::wlru(CACHE* cache, long sets, long ways)
     :replacement(cache),
     NUM_WAYS(ways),
     last_used_cycles(static_cast<std::size_t>(sets * ways), 0),
+    address_mapper("pzen", 2, 8, 4, 65536, 128, sets),
     lookup_sel(ways, SEL_INIT),
     test_eviction_pos(static_cast<std::size_t>(sets*ways), -1),
     set_modulus(sets / NUM_SAMPLED_SETS),
@@ -23,11 +24,8 @@ wlru::wlru(CACHE* cache, long sets, long ways)
 void
 wlru::initialize_replacement()
 {
-    // initialize dram-related structures:
-    dram = &dram_ref();
-
-    size_t tot_banks = dram->num_banks * dram->num_bankgroups;
-    bank_writeback_done = std::vector<std::vector<bool>>(dram->num_channels, std::vector<bool>(tot_banks, false));
+    size_t tot_banks = 32;
+    bank_writeback_done = std::vector<std::vector<bool>>(2, std::vector<bool>(tot_banks, false));
 }
 
 long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, const champsim::cache_block* current_set, champsim::address ip,
@@ -64,8 +62,8 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
         if (lru_pos < max_lookup)
         {
             auto address = current_set[ii].address;
-            size_t channel = dram->address_mapper.channel(address),
-                   b_idx = dram->address_mapper.bank_idx(address);
+            size_t channel = address_mapper.channel(address),
+                   b_idx = address_mapper.bank_idx(address);
             bool prio = !bank_writeback_done[channel][b_idx];
             bool dirty = current_set[ii].dirty;
 
@@ -113,8 +111,8 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
 
         victim_way = std::distance(begin, victim);
         victim_was_dirty = current_set[victim_way].dirty;
-        victim_channel = dram->address_mapper.channel(current_set[victim_way].address);
-        victim_bank_idx = dram->address_mapper.channel(current_set[victim_way].address);
+        victim_channel = address_mapper.channel(current_set[victim_way].address);
+        victim_bank_idx = address_mapper.channel(current_set[victim_way].address);
 
         // Check if `test_eviction_pos` is set for the LRU victim:
         if (test_eviction_pos[set*NUM_WAYS + victim_way] >= 0)

@@ -11,23 +11,23 @@
 
 DRAM_ADDRESS_MAPPER::DRAM_ADDRESS_MAPPER(
         std::string mapping_name,
-        size_t channels,
-        size_t bankgroups,
-        size_t banks,
-        size_t rows,
-        size_t columns,
-        size_t llc_sets)
-    :channels(channels),
-    bankgroups(bankgroups),
-    banks(banks),
-    rows(rows),
-    columns(columns),
-    ch_width(ilog2(channels)),
-    bg_width(ilog2(bankgroups)),
-    ba_width(ilog2(banks)),
-    row_width(ilog2(rows)),
-    llc_sets(llc_sets),
-    llc_set_width(ilog2(llc_sets))
+        size_t _channels,
+        size_t _bankgroups,
+        size_t _banks,
+        size_t _rows,
+        size_t _columns,
+        size_t _llc_sets)
+    :channels(_channels),
+    bankgroups(_bankgroups),
+    banks(_banks),
+    rows(_rows),
+    columns(_columns),
+    ch_width(ilog2(_channels)),
+    bg_width(ilog2(_bankgroups)),
+    ba_width(ilog2(_banks)),
+    row_width(ilog2(_rows)),
+    llc_sets(_llc_sets),
+    llc_set_width(ilog2(_llc_sets))
 {
     size_t column_width = ilog2(columns);
 

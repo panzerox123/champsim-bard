@@ -20,8 +20,6 @@ public:
 
     std::vector<std::shared_ptr<DRAM_CHANNEL>> channels;
 
-    const std::string dram_type;
-
     const size_t num_channels;
     const size_t num_bankgroups;
     const size_t num_banks;

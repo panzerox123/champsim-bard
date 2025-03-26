@@ -21,25 +21,25 @@ DRAM_CHANNEL::DRAM_CHANNEL(
         champsim::chrono::picoseconds mc_period,
         std::size_t rq_size,
         std::size_t wq_size,
-        std::size_t channel_id,
-        std::size_t num_bankgroups,
-        std::size_t num_banks,
-        std::size_t num_rows,
+        std::size_t _channel_id,
+        std::size_t _num_bankgroups,
+        std::size_t _num_banks,
+        std::size_t _num_rows,
         const DRAM_ADDRESS_MAPPER& am,
         const DRAM_TIMING& timing)
     :champsim::operable(mc_period),
     RQ(rq_size),
     WQ(wq_size),
-    banks(num_bankgroups*num_banks, BANK_DATA{}),
+    banks(_num_bankgroups*_num_banks, BANK_DATA{}),
     low_watermark(wq_size/4),
     high_watermark(3 * (wq_size/4)),
-    num_bankgroups(num_bankgroups),
-    num_banks(num_banks),
-    num_rows(num_rows),
-    channel_id(channel_id),
+    num_bankgroups(_num_bankgroups),
+    num_banks(_num_banks),
+    num_rows(_num_rows),
+    channel_id(_channel_id),
     address_mapper(am),
     dram_timing(timing),
-    writes_per_bank(num_bankgroups*num_banks, 0)
+    writes_per_bank(_num_bankgroups*_num_banks, 0)
 {
 #if defined(DRAM_ENABLE_LOGGER)
     logger = std::ofstream("dram_channel." + std::to_string(channel_id) + ".log");
@@ -169,7 +169,7 @@ DRAM_CHANNEL::schedule_ready_request()
         t = std::max(t, this->current_time + delta);
     };
 
-    uint64_t latency = (current_time - q_it->value().install_time).count() / 1000;
+    [[ maybe_unused ]] uint64_t latency = (current_time - q_it->value().install_time).count() / 1000;
     if (cmd.type == DRAM_COMMAND::TYPE::READ || cmd.type == DRAM_COMMAND::TYPE::WRITE)
     {
         const bool is_read = cmd.type == DRAM_COMMAND::TYPE::READ;
@@ -538,5 +538,10 @@ DRAM_CHANNEL::operate()
 void
 DRAM_CHANNEL::print_deadlock()
 {
-    std::cerr << "DEADLOCK IN DRAM_CHANNEL -- TODO\n";
+    fmt::print("CHANNEL {} DEADLOCK:\n", channel_id);
+
+    size_t read_occu = std::count_if(RQ.begin(), RQ.end(), [] (const auto& e) { return e.has_value(); });
+    size_t write_occu = std::count_if(WQ.begin(), WQ.end(), [] (const auto& e) { return e.has_value(); });
+
+    fmt::print("\tREAD OCCU = {}, WRITE OCCU = {}\n", read_occu, write_occu);
 }

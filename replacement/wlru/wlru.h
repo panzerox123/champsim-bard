@@ -4,10 +4,8 @@
 #include <vector>
 
 #include "cache.h"
-#include "dram_controller.h"
+#include "dram_address.h"
 #include "modules.h"
-
-class MEMORY_CONTROLLER;
 
 class wlru : public champsim::modules::replacement
 {
@@ -24,7 +22,8 @@ private:
     std::vector<uint64_t> last_used_cycles;
     uint64_t cycle = 0;
 
-    MEMORY_CONTROLLER* dram;
+    // Definition is hard-coded for now -- need to setup ptr to DRAM
+    DRAM_ADDRESS_MAPPER address_mapper;
 
     std::vector<std::vector<bool>> bank_writeback_done;
     std::vector<int> lookup_sel;
