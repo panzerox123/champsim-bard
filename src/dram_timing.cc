@@ -5,6 +5,7 @@
 
 #include "dram_timing.h"
 
+#include <cmath>
 #include <iostream>
 
 DRAM_TIMING::DRAM_TIMING(std::string_view dram_type, champsim::chrono::picoseconds mc_period)
