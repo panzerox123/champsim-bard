@@ -1,6 +1,5 @@
 /*
- *  author: Suhas Vittal
- *  date:   23 March 2025
+ *  author: Suhas Vittal date:   23 March 2025
  * */
 
 #ifndef DRAM_CHANNEL_h
@@ -17,6 +16,8 @@
 #include <array>
 #include <cstdint>
 #include <cstddef>
+#include <fstream>
+#include <iosfwd>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -59,6 +60,7 @@ struct DRAM_CHANNEL final : public champsim::operable
         champsim::address v_address{};
         champsim::address data{};
         champsim::chrono::clock::time_point ready_time = champsim::chrono::clock::time_point::max();
+        champsim::chrono::clock::time_point install_time{};
 
         std::vector<uint64_t> instr_depend_on_me{};
         std::vector<std::deque<response_type>*> to_return{};
@@ -95,13 +97,23 @@ struct DRAM_CHANNEL final : public champsim::operable
     const size_t num_bankgroups;
     const size_t num_banks;
     const size_t num_rows;
+
+    const size_t channel_id;
 private:
     DRAM_ADDRESS_MAPPER address_mapper;
     DRAM_TIMING         dram_timing;
+
+    bool write_drain_started_with_no_read_occu;
+    size_t writes_during_drain =0;
+    std::vector<size_t> writes_per_bank;
+    champsim::chrono::clock::time_point write_drain_start{};
+
+    std::ofstream logger{};
+    champsim::chrono::clock::time_point last_cas_command_time{};
 public:
     DRAM_CHANNEL(champsim::chrono::picoseconds mc_period,
                 std::size_t rq_size, std::size_t wq_size,
-                std::size_t num_bankgroups, std::size_t num_banks, std::size_t num_rows,
+                std::size_t channel_id, std::size_t num_bankgroups, std::size_t num_banks, std::size_t num_rows,
                 const DRAM_ADDRESS_MAPPER&, const DRAM_TIMING&);
 
     cmd_output_type find_ready_request(void);

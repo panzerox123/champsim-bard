@@ -127,6 +127,12 @@ std::vector<std::string> champsim::plain_printer::format(CACHE::stats_type stats
   return lines;
 }
 
+template <class T, class U>
+inline double mean(T x, U tot)
+{
+    return static_cast<double>(x) / static_cast<double>(tot);
+}
+
 std::vector<std::string> champsim::plain_printer::format(DRAM_CHANNEL::stats_type stats)
 {
   std::vector<std::string> lines{};
@@ -134,7 +140,13 @@ std::vector<std::string> champsim::plain_printer::format(DRAM_CHANNEL::stats_typ
   lines.push_back(fmt::format("  READS: {:10}\tREAD_HITS: {:10}", stats.reads, stats.read_row_hits));
   lines.push_back(fmt::format("  WRITES: {:10}\tWRITE HITS: {:10}", stats.writes, stats.write_row_hits));
   lines.push_back(fmt::format("  ACTIVATES: {:10}\tPRECHARGES: {:10}", stats.activates, stats.precharges));
-  lines.push_back(fmt::format("  WQ FULL: {:10}", stats.wq_full));
+  lines.push_back(fmt::format("  RQ FULL: {:10}\tWQ FULL: {:10}", stats.rq_full, stats.wq_full));
+
+  lines.push_back(fmt::format("  WRITE DRAINS: {:10}\tFORCED: {:10}", stats.num_write_drains, stats.num_forced_write_drains));
+  lines.push_back(fmt::format("  MEAN WRITE IMBALANCE: {:10}", mean(stats.tot_write_imbalance, stats.num_write_drains)));
+  lines.push_back(fmt::format("  READ OCCU PRE DRAIN: {:10}\tPOST DRAIN: {:10}", mean(stats.tot_read_occu_pre_drain, stats.num_write_drains), mean(stats.tot_read_occu_post_drain, stats.num_write_drains)));
+
+  lines.push_back(fmt::format("  READ LATENCY: {:10}", mean(stats.tot_read_latency, stats.reads)));
 
   return lines;
 }

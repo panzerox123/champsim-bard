@@ -18,7 +18,7 @@ public:
     DRAM_ADDRESS_MAPPER address_mapper;
     DRAM_TIMING dram_timing;
 
-    std::vector<DRAM_CHANNEL> channels;
+    std::vector<std::shared_ptr<DRAM_CHANNEL>> channels;
 
     const std::string dram_type;
 

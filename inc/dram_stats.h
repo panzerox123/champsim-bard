@@ -25,6 +25,16 @@ struct dram_stats
     uint32_t read_row_hits =0;
     uint32_t write_row_hits =0;
 
+    uint32_t num_write_drains =0;
+    uint32_t num_forced_write_drains =0;
+    uint64_t tot_time_in_write_mode =0;
+    uint64_t tot_write_imbalance =0;
+    uint64_t tot_read_occu_pre_drain =0;
+    uint64_t tot_read_occu_post_drain =0;
+
+    uint64_t tot_read_latency =0;
+
+    uint64_t rq_full =0;
     uint64_t wq_full =0;
 };
 

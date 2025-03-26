@@ -15,10 +15,13 @@ DRAM_CHANNEL::request_type::request_type(const typename champsim::channel::reque
   asid[1] = req.asid[1];
 }
 
+//#define DRAM_ENABLE_LOGGER
+
 DRAM_CHANNEL::DRAM_CHANNEL(
         champsim::chrono::picoseconds mc_period,
         std::size_t rq_size,
         std::size_t wq_size,
+        std::size_t channel_id,
         std::size_t num_bankgroups,
         std::size_t num_banks,
         std::size_t num_rows,
@@ -33,9 +36,15 @@ DRAM_CHANNEL::DRAM_CHANNEL(
     num_bankgroups(num_bankgroups),
     num_banks(num_banks),
     num_rows(num_rows),
+    channel_id(channel_id),
     address_mapper(am),
-    dram_timing(timing)
-{}
+    dram_timing(timing),
+    writes_per_bank(num_bankgroups*num_banks, 0)
+{
+#if defined(DRAM_ENABLE_LOGGER)
+    logger = std::ofstream("dram_channel." + std::to_string(channel_id) + ".log");
+#endif
+}
 
 DRAM_CHANNEL::cmd_output_type
 DRAM_CHANNEL::find_ready_request()
@@ -43,17 +52,18 @@ DRAM_CHANNEL::find_ready_request()
     cmd_output_type out;
 
     // First check active buffer for any issuable commands:
-    for (auto it = banks.begin(); it != banks.end(); it++)
+    for (const auto& b : banks)
     {
-        if (!it->active_request.has_value())
+        if (!b.active_request.has_value())
             continue;
 
         // Check if the request is issuable:
-        auto& [is_read, req_it] = it->active_request.value();
-        if ((is_read && current_time >= it->state.read_ok) || (!is_read && current_time >= it->state.write_ok))
+        auto& [is_read, req_it] = b.active_request.value();
+        if ((is_read && current_time >= b.state.read_ok) || (!is_read && current_time >= b.state.write_ok))
         {
             DRAM_COMMAND::TYPE cmd_type = is_read ? DRAM_COMMAND::TYPE::READ : DRAM_COMMAND::TYPE::WRITE;
             DRAM_COMMAND ready_cmd{req_it->value().address, cmd_type};
+            ready_cmd.autopre = true;
 
             if (out.first.type == DRAM_COMMAND::TYPE::INVALID
                 || (out.second->value().ready_time > req_it->value().ready_time))
@@ -68,6 +78,8 @@ DRAM_CHANNEL::find_ready_request()
 
     // If nothing could be done, schedule reads and writes:
     auto& q = write_mode ? WQ : RQ;
+
+    std::vector<bool> banks_with_row_hits(num_bankgroups*num_banks, false);
     for (auto it = q.begin(); it != q.end(); it++)
     {
         if (!it->has_value())
@@ -77,12 +89,27 @@ DRAM_CHANNEL::find_ready_request()
         if (req.scheduled)
             continue;
 
-        DRAM_COMMAND ready_cmd{};
-        ready_cmd.address = req.address;
+        size_t b_idx = address_mapper.bank_idx(req.address);
+        const auto& b = banks.at(b_idx);
+
+        if (b.state.open_row.has_value() && b.state.open_row.value() == address_mapper.row(req.address))
+            banks_with_row_hits[b_idx] = true;
+    }
+
+    for (auto it = q.begin(); it != q.end(); it++)
+    {
+        if (!it->has_value())
+            continue;
+
+        const auto& req = it->value();
+        if (req.scheduled)
+            continue;
 
         size_t b_idx = address_mapper.bank_idx(req.address);
-        
         const auto& b = banks.at(b_idx);
+
+        DRAM_COMMAND ready_cmd{};
+        ready_cmd.address = req.address;
         
         // Cannot schedule anything if the bank has an active request:
         if (b.active_request.has_value())
@@ -97,20 +124,9 @@ DRAM_CHANNEL::find_ready_request()
                 else if (!write_mode && current_time >= b.state.read_ok)
                     ready_cmd.type = DRAM_COMMAND::TYPE::READ;
             }
-            else
+            else if (!banks_with_row_hits[b_idx] && current_time >= b.state.pre_ok)
             {
-                bool no_pending_row_hits = std::none_of(std::next(it), q.end(),
-                                                [this, b_idx, row=b.state.open_row.value()]
-                                                (const auto& e)
-                                                {
-                                                    if (!e.has_value() || e.value().scheduled)
-                                                        return false;
-                                                    if (this->address_mapper.bank_idx(e.value().address) != b_idx)
-                                                        return false;
-                                                    return this->address_mapper.row(e.value().address) == row;
-                                                });
-                if (no_pending_row_hits && current_time >= b.state.pre_ok)
-                    ready_cmd.type = DRAM_COMMAND::TYPE::PRECHARGE;
+                ready_cmd.type = DRAM_COMMAND::TYPE::PRECHARGE;
             }
         }
         else if (current_time >= b.state.act_ok && faw.size() < 4)
@@ -119,8 +135,13 @@ DRAM_CHANNEL::find_ready_request()
         }
 
         if (ready_cmd.type != DRAM_COMMAND::TYPE::INVALID &&
-            (out.first.type == DRAM_COMMAND::TYPE::INVALID || out.second->value().ready_time < req.ready_time))
+            (out.first.type == DRAM_COMMAND::TYPE::INVALID || req.ready_time < out.second->value().ready_time))
         {
+            if (ready_cmd.type == DRAM_COMMAND::TYPE::READ || ready_cmd.type == DRAM_COMMAND::TYPE::WRITE)
+            {
+                ready_cmd.autopre = true;
+            }
+
             out = cmd_output_type{ready_cmd, it};
         }
     }
@@ -148,6 +169,7 @@ DRAM_CHANNEL::schedule_ready_request()
         t = std::max(t, this->current_time + delta);
     };
 
+    uint64_t latency = (current_time - q_it->value().install_time).count() / 1000;
     if (cmd.type == DRAM_COMMAND::TYPE::READ || cmd.type == DRAM_COMMAND::TYPE::WRITE)
     {
         const bool is_read = cmd.type == DRAM_COMMAND::TYPE::READ;
@@ -156,25 +178,54 @@ DRAM_CHANNEL::schedule_ready_request()
         q_it->value().ready_time = current_time + (is_read ? (dram_timing.CL + dram_timing.burst) 
                                                            : (dram_timing.CWL + dram_timing.burst));
 
-        b.active_request.reset();
-        update(b.state.pre_ok, is_read ? dram_timing.tRTP 
-                                       : (dram_timing.CWL + dram_timing.burst + dram_timing.tWR));
-
         if (is_read)
         {
             ++sim_stats.reads;
             sim_stats.read_row_hits += b.state.next_cas_is_row_hit;
+            sim_stats.tot_read_latency += (q_it->value().ready_time - q_it->value().install_time).count() / 1000;
         }
         else
         {
             ++sim_stats.writes;
             sim_stats.write_row_hits += b.state.next_cas_is_row_hit;
+            ++writes_during_drain;
+            ++writes_per_bank[b_idx];
         }
 
-        b.state.next_cas_is_row_hit = true;
+        // Sanity check:
+        if (!b.state.open_row.has_value() || b.state.open_row.value() != address_mapper.row(cmd.address))
+        {
+            std::cerr << "Received invalid column command\n";
+            exit(1);
+        }
+
+        b.active_request.reset();
+
+        if (cmd.autopre)
+        {
+            update(b.state.act_ok, is_read ? dram_timing.tRTP + dram_timing.tRP
+                                           : (dram_timing.CWL + dram_timing.burst + dram_timing.tWR + dram_timing.tRP));
+            b.state.open_row.reset();
+            b.state.next_cas_is_row_hit = false;
+
+            ++sim_stats.precharges;
+        }
+        else
+        {
+            update(b.state.pre_ok, is_read ? dram_timing.tRTP 
+                                           : (dram_timing.CWL + dram_timing.burst + dram_timing.tWR));
+            b.state.next_cas_is_row_hit = true;
+        }
     }
     else if (cmd.type == DRAM_COMMAND::TYPE::ACTIVATE)
     {
+        // Sanity check:
+        if (b.state.open_row.has_value())
+        {
+            std::cerr << "Received activate when row is open\n";
+            exit(1);
+        }
+
         // Update bank state and active entry;
         b.active_request = BANK_DATA::active_entry_type{!write_mode, q_it};
         b.state.open_row = address_mapper.row(cmd.address);
@@ -188,13 +239,24 @@ DRAM_CHANNEL::schedule_ready_request()
 
         ++sim_stats.activates;
     }
-    else  // Precharge:
+    else if (cmd.type == DRAM_COMMAND::TYPE::PRECHARGE)
     {
+        if (!b.state.open_row.has_value())
+        {
+            std::cerr << "Received precharge when row is closed\n";
+            exit(1);
+        }
+
         b.state.open_row.reset();
         b.state.next_cas_is_row_hit = false;
         update(b.state.act_ok, dram_timing.tRP);
 
         ++sim_stats.precharges;
+    }
+    else
+    {
+        std::cerr << "unknown dram command\n";
+        exit(1);
     }
 
     // Update dram bankgroup state:
@@ -224,6 +286,31 @@ DRAM_CHANNEL::schedule_ready_request()
             ++ii;
         }
     }
+
+#if defined(DRAM_ENABLE_LOGGER)
+    std::string cmd_string;
+    
+    if (cmd.type == DRAM_COMMAND::TYPE::READ)
+        cmd_string = "READ";
+    else if (cmd.type == DRAM_COMMAND::TYPE::WRITE)
+        cmd_string = "WRITE";
+    else if (cmd.type == DRAM_COMMAND::TYPE::PRECHARGE)
+        cmd_string = "PRECHARGE";
+    else
+        cmd_string = "ACTIVATE";
+
+    size_t row = address_mapper.row(cmd.address);
+    uint64_t delta = (current_time - last_cas_command_time).count() / 1000;
+
+    logger << cmd_string << "\tbank = " << b_idx << "\trow = " << row << "\t+" << delta << " ns";
+
+    if (cmd.type == DRAM_COMMAND::TYPE::READ || cmd.type == DRAM_COMMAND::TYPE::WRITE)
+        logger << "\t(T = " << latency << ")";
+
+    logger << "\n";
+
+    last_cas_command_time = current_time;
+#endif
 
     return progress;
 }
@@ -367,10 +454,33 @@ DRAM_CHANNEL::update_read_write_priority()
     if (write_mode && (read_occu > 0 && write_occu < low_watermark))
     {
         write_mode = false; 
+
+        uint64_t write_time = (current_time - write_drain_start).count();
+        sim_stats.tot_time_in_write_mode += write_time;
+
+        if (writes_during_drain)
+        {
+            ++sim_stats.num_write_drains;
+            if (!write_drain_started_with_no_read_occu)
+                ++sim_stats.num_forced_write_drains;
+
+            auto [min_it, max_it] = std::minmax_element(writes_per_bank.begin(), writes_per_bank.end());
+            sim_stats.tot_write_imbalance += *max_it - *min_it;
+
+            sim_stats.tot_read_occu_post_drain += read_occu;
+        }
     }
     else if (!write_mode && ((read_occu == 0 && write_occu > 0) || write_occu >= high_watermark))
     {
         write_mode = true;
+
+        writes_during_drain = 0;
+        write_drain_start = current_time;
+        write_drain_started_with_no_read_occu = (read_occu == 0);
+
+        sim_stats.tot_read_occu_pre_drain += read_occu;
+
+        std::fill(writes_per_bank.begin(), writes_per_bank.end(), 0);
     }
 }
 
@@ -408,12 +518,12 @@ DRAM_CHANNEL::operate()
     }
 
     // Otherwise:
+    progress += complete_requests();
     check_write_collision();
     check_read_collision();
     progress += handle_refresh();
     update_read_write_priority();
     progress += schedule_ready_request();
-    progress += complete_requests();
 
     // Update faw:
     while (!faw.empty() && current_time >= faw.front())

@@ -28,14 +28,16 @@ MEMORY_CONTROLLER::MEMORY_CONTROLLER(champsim::chrono::picoseconds mc_period,
     :champsim::operable(mc_period),
     address_mapper(address_mapping_name, num_channels, num_bankgroups, num_banks, num_rows, num_columns, llc_sets),
     dram_timing(dram_type, mc_period),
-    channels(num_channels, DRAM_CHANNEL(mc_period, rq_size, wq_size, num_bankgroups, num_banks, num_rows, address_mapper, dram_timing)),
     num_channels(num_channels),
     num_bankgroups(num_bankgroups),
     num_banks(num_banks),
     num_rows(num_rows),
     num_columns(num_columns),
     queues(std::move(ul))
-{}
+{
+    for (size_t i = 0; i < num_channels; i++)
+        channels.emplace_back(new DRAM_CHANNEL(mc_period, rq_size, wq_size, i, num_bankgroups, num_banks, num_rows, address_mapper, dram_timing));
+}
 
 void
 MEMORY_CONTROLLER::initialize()
@@ -72,7 +74,7 @@ MEMORY_CONTROLLER::initialize()
 
     address_mapper.print_address_mapping();
 
-    fmt::print("dram queue size: R = {} W = {} (low:high is {}:{})\n", channels[0].RQ.size(), channels[0].WQ.size(), channels[0].low_watermark, channels[0].high_watermark);
+    fmt::print("dram queue size: R = {} W = {} (low:high is {}:{})\n", channels[0]->RQ.size(), channels[0]->WQ.size(), channels[0]->low_watermark, channels[0]->high_watermark);
 }
 
 long
@@ -82,7 +84,7 @@ MEMORY_CONTROLLER::operate()
 
     initiate_requests();
     for (auto& ch : channels)
-        progress += ch._operate();
+        progress += ch->_operate();
     
     return progress;
 }
@@ -94,8 +96,8 @@ MEMORY_CONTROLLER::begin_phase()
     {
         DRAM_CHANNEL::stats_type new_stats;
         new_stats.name = "Channel " + std::to_string(i);
-        channels[i].sim_stats = new_stats;
-        channels[i].warmup = warmup;
+        channels[i]->sim_stats = new_stats;
+        channels[i]->warmup = warmup;
     }
 
     for (auto* ul : queues)
@@ -111,14 +113,14 @@ void
 MEMORY_CONTROLLER::end_phase(unsigned cpu)
 {
     for (auto& chan : channels)
-        chan.end_phase(cpu);
+        chan->end_phase(cpu);
 }
 
 void
 MEMORY_CONTROLLER::print_deadlock()
 {
     for (auto& chan : channels)
-        chan.print_deadlock();
+        chan->print_deadlock();
 }
 
 champsim::data::bytes
@@ -150,8 +152,8 @@ MEMORY_CONTROLLER::add_rq(const request_type& packet, champsim::channel* ul)
 {
     auto& channel = channels[address_mapper.channel(packet.address)];
 
-    auto rq_it = std::find_if_not(std::begin(channel.RQ), std::end(channel.RQ), [] (const auto& pkt) { return pkt.has_value(); });
-    if (rq_it != std::end(channel.RQ))
+    auto rq_it = std::find_if_not(std::begin(channel->RQ), std::end(channel->RQ), [] (const auto& pkt) { return pkt.has_value(); });
+    if (rq_it != std::end(channel->RQ))
     {
         *rq_it = DRAM_CHANNEL::request_type{packet};
         rq_it->value().forward_checked = false;
@@ -160,10 +162,13 @@ MEMORY_CONTROLLER::add_rq(const request_type& packet, champsim::channel* ul)
         if (packet.response_requested)
             rq_it->value().to_return = {&ul->returned};
 
-        ++channel.sim_stats.read_requests;
+        rq_it->value().install_time = current_time;
+
+        ++channel->sim_stats.read_requests;
         return true;
     }
 
+    ++channel->sim_stats.rq_full;
     return false;
 }
 
@@ -173,18 +178,20 @@ MEMORY_CONTROLLER::add_wq(const request_type& packet)
     auto& channel = channels[address_mapper.channel(packet.address)];
 
     // search for the empty index
-    auto wq_it = std::find_if_not(std::begin(channel.WQ), std::end(channel.WQ), [](const auto& pkt) { return pkt.has_value(); });
-    if (wq_it != std::end(channel.WQ))
+    auto wq_it = std::find_if_not(std::begin(channel->WQ), std::end(channel->WQ), [](const auto& pkt) { return pkt.has_value(); });
+    if (wq_it != std::end(channel->WQ))
     {
         *wq_it = DRAM_CHANNEL::request_type{packet};
         wq_it->value().forward_checked = false;
         wq_it->value().scheduled = false;
         wq_it->value().ready_time = current_time;
 
-        ++channel.sim_stats.write_requests;
+        wq_it->value().install_time = current_time;
+
+        ++channel->sim_stats.write_requests;
         return true;
     }
 
-    ++channel.sim_stats.wq_full;
+    ++channel->sim_stats.wq_full;
     return false;
 }
