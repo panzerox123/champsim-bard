@@ -18,8 +18,8 @@ def get_name(filename: str, suite: str) -> str:
 build = argv[1]
 rate = int(argv[2])
 
-INST_SIM = 100_000_000
-INST_WARMUP = 25_000_000
+INST_SIM = 50_000_000
+INST_WARMUP = 15_000_000
 
 for suite in SUITES:
     output_folder = f'out/{build}/{suite}'
