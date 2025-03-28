@@ -31,6 +31,10 @@ struct cache_block {
   champsim::address data{};
 
   uint32_t pf_metadata = 0;
+  /*
+   * Custom flags and data:
+   * */
+  bool vwq_can_use =false;
 };
 } // namespace champsim
 

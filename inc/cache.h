@@ -124,10 +124,10 @@ private:
 
 public:
   using BLOCK = champsim::cache_block;
+  using set_type = std::vector<BLOCK>;
 
 private:
   static BLOCK fill_block(mshr_type mshr, uint32_t metadata);
-  using set_type = std::vector<BLOCK>;
 
   std::pair<set_type::iterator, set_type::iterator> get_set_span(champsim::address address);
   [[nodiscard]] std::pair<set_type::const_iterator, set_type::const_iterator> get_set_span(champsim::address address) const;
@@ -537,5 +537,10 @@ void CACHE::replacement_module_model<Rs...>::impl_replacement_final_stats()
 #undef SET_ASIDE_CHAMPSIM_MODULE
 #define CHAMPSIM_MODULE
 #endif
+
+/*
+ * Command-line options:
+ * */
+extern bool opt_cache_enable_vwq;
 
 #endif

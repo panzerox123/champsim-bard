@@ -33,7 +33,6 @@ private:
 
     const size_t set_modulus;
     const size_t ilog2_set_modulus;
-
     /*
      * Stats:
      * */

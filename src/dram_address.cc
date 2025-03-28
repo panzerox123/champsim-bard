@@ -102,7 +102,7 @@ DRAM_ADDRESS_MAPPER::set_bank_idx_of_address(champsim::address a, size_t bank_id
     uint64_t _a{a.to<uint64_t>()};
     _a &= ~(1L << (bg_width+ba_width)) << bg_offset;  // Clear out bank idx
     _a |= (bank_idx << bg_offset);
-    return champsim::address{a};
+    return champsim::address{_a};
 }
 
 void

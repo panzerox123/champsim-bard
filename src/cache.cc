@@ -189,7 +189,8 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
                (fill_mshr.time_enqueued.time_since_epoch()) / clock_period, (current_time.time_since_epoch()) / clock_period);
   }
 
-  if (way != set_end && way->valid && way->dirty) {
+  if (way != set_end && way->valid && way->dirty)
+  {
     request_type writeback_packet;
 
     writeback_packet.cpu = fill_mshr.cpu;
@@ -201,7 +202,8 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
     writeback_packet.pf_metadata = way->pf_metadata;
     writeback_packet.response_requested = false;
 
-    if constexpr (champsim::debug_print) {
+    if constexpr (champsim::debug_print)
+    {
       fmt::print("[{}] {} evict address: {:#x} v_address: {:#x} prefetch_metadata: {}\n", NAME, __func__, writeback_packet.address, writeback_packet.v_address,
                  fill_mshr.data_promise->pf_metadata);
     }
@@ -209,6 +211,40 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
     auto success = lower_level->add_wq(writeback_packet);
     if (!success) {
       return false;
+    }
+
+    // Perform virtual write queue writebacks (check random sets for writebacks because we are using a page-permutation based address mapping):
+    if (dram != nullptr && opt_cache_enable_vwq)
+    {
+        size_t match_row = dram->address_mapper.row(way->address);
+        for (size_t tries = 0; tries < 8; tries++)
+        {
+            size_t vwq_set_id = std::rand() % NUM_SET;
+            auto vwq_set_begin = std::next(block.begin(), vwq_set_id*NUM_WAY);
+            auto vwq_set_end = std::next(vwq_set_begin, NUM_WAY);
+
+            for (auto it = vwq_set_begin; it != vwq_set_end; it++)
+            {
+                if (it->valid && it->dirty && it->vwq_can_use && dram->address_mapper.row(it->address) == match_row)
+                {
+                    // Try to enqueue:
+                    request_type vwq_packet;
+                    vwq_packet.cpu = fill_mshr.cpu;
+                    vwq_packet.address = it->address;
+                    vwq_packet.data = it->data;
+                    vwq_packet.instr_id = fill_mshr.instr_id;
+                    vwq_packet.type = access_type::WRITE;
+                    vwq_packet.pf_metadata = it->pf_metadata;
+                    vwq_packet.response_requested = false;
+                    
+                    bool success = lower_level->add_wq(vwq_packet);
+                    if (success)
+                        it->dirty = false;
+                    else
+                        break;
+                }
+            }
+        }
     }
   }
 
