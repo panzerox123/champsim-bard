@@ -15,9 +15,11 @@ wlru::wlru(CACHE* cache, long sets, long ways)
     NUM_WAYS(ways),
     last_used_cycles(static_cast<std::size_t>(sets * ways), 0),
     address_mapper(cache->dram->address_mapper),
+    dram(cache->dram),
     bank_writeback_done(cache->dram->num_channels, std::vector<bool>(cache->dram->num_bankgroups*cache->dram->num_banks, false)),
     lookup_sel(ways, SEL_INIT),
     test_eviction_pos(static_cast<std::size_t>(sets*ways), -1),
+    test_eviction_pos_used(static_cast<std::size_t>(sets*ways), false),
     set_modulus(sets / NUM_SAMPLED_SETS),
     ilog2_set_modulus(ilog2(set_modulus))
 {}
@@ -25,8 +27,6 @@ wlru::wlru(CACHE* cache, long sets, long ways)
 void
 wlru::initialize_replacement()
 {
-    size_t tot_banks = address_mapper.bankgroups*address_mapper.banks;
-    bank_writeback_done = std::vector<std::vector<bool>>(address_mapper.channels, std::vector<bool>(tot_banks, false));
 }
 
 long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, const champsim::cache_block* current_set, champsim::address ip,
@@ -116,7 +116,7 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
         victim_bank_idx = address_mapper.channel(current_set[victim_way].address);
 
         // Check if `test_eviction_pos` is set for the LRU victim:
-        if (test_eviction_pos[set*NUM_WAYS + victim_way] >= 0)
+        if (test_eviction_pos[set*NUM_WAYS + victim_way] >= 0 && !test_eviction_pos_used[set*NUM_WAYS + victim_way])
         {
             size_t p = test_eviction_pos[set*NUM_WAYS + victim_way];
             if (lookup_sel[p] < SEL_MAX)
@@ -155,6 +155,7 @@ void wlru::replacement_cache_fill(uint32_t triggering_cpu, long set, long way, c
 
     // Reset `test_eviction_pos`
     test_eviction_pos[set*NUM_WAYS + way] = -1;
+    test_eviction_pos_used[set*NUM_WAYS + way] = false;
 }
 
 void wlru::update_replacement_state(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip,
@@ -167,15 +168,23 @@ void wlru::update_replacement_state(uint32_t triggering_cpu, long set, long way,
         {
             int p = test_eviction_pos[set*NUM_WAYS + way];
             if (p >= 0)
-                lookup_sel[p] -= (lookup_sel[p]>>2);
+            {
+                if (lookup_sel[p] > SEL_MIN)
+                    --lookup_sel[p];
+                test_eviction_pos_used[set*NUM_WAYS + way] = true;
+            }
         }
         else
         {
             last_used_cycles.at((std::size_t)(set * NUM_WAYS + way)) = cycle++;
             int p = test_eviction_pos[set*NUM_WAYS + way];
 
-            if (p >= 0 && lookup_sel[p] > SEL_MIN)
-                --lookup_sel[p];
+            if (p >= 0)
+            {
+                if (lookup_sel[p] > SEL_MIN)
+                    --lookup_sel[p];
+                test_eviction_pos_used[set*NUM_WAYS + way] = true;
+            }
         }
     }
 }
@@ -189,6 +198,18 @@ wlru::replacement_final_stats()
 size_t
 wlru::compute_max_lookup() const
 {
+    size_t num_drains = 0, num_forced_drains = 0;
+    for (size_t i = 0; i < dram->channels.size(); i++)
+    {
+        num_drains += dram->channels[i]->sim_stats.num_write_drains;
+        num_forced_drains += dram->channels[i]->sim_stats.num_forced_write_drains;
+    }
+    if (num_drains > 256)
+    {
+        double ratio = ((double)num_forced_drains)/((double)num_drains);
+        if (ratio < 0.05)
+            return 1;
+    }
     auto it = std::find_if(lookup_sel.rbegin(), lookup_sel.rend(),
                     [] (auto x) { return x >= SEL_THRESHOLD; });
     return static_cast<size_t>(NUM_WAYS - std::distance(lookup_sel.rbegin(), it));

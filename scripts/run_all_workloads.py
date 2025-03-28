@@ -1,9 +1,10 @@
 from sys import argv
 import os
 
-SUITES = ['spec2017', 'ligra', 'parsec']
+SUITES = ['spec2017', 'ligra', 'stream']
 
 def get_name(filename: str, suite: str) -> str:
+    left, right = 0, filename.find('.champsimtrace.xz')
     if suite == 'spec2017':
         left = len('6xx.')
         right = filename.find('_s')
@@ -18,8 +19,8 @@ def get_name(filename: str, suite: str) -> str:
 build = argv[1]
 rate = int(argv[2])
 
-INST_SIM = 50_000_000
-INST_WARMUP = 15_000_000
+INST_SIM = 100_000_000
+INST_WARMUP = 25_000_000
 
 for suite in SUITES:
     output_folder = f'out/{build}/{suite}'
@@ -33,4 +34,4 @@ for suite in SUITES:
         trace_filepath = f'{trace_folder}/{trace}'
 
         trace_part = ' '.join([trace_filepath for _ in range(rate)])
-        print(f'g++ -v && ./bin/{build} {trace_part} --warmup-instructions {INST_WARMUP} --simulation-instructions {INST_SIM} > {output_folder}/{name}.out &')
+        print(f'./bin/{build} {trace_part} --warmup-instructions {INST_WARMUP} --simulation-instructions {INST_SIM} > {output_folder}/{name}.out')

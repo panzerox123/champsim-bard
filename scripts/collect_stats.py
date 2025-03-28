@@ -6,7 +6,7 @@ from sys import argv
 from collections import defaultdict
 import os
 
-SUITES = ['spec2017', 'parsec', 'ligra']
+SUITES = ['spec2017', 'ligra', 'stream']
 
 def collect_stats(build: str, output_file: str):
     wr = open(output_file, 'w')
@@ -21,6 +21,8 @@ def collect_stats(build: str, output_file: str):
             
             name = f[:f.find('.out')]
             data_file = f'{data_folder}/{f}'
+            
+            print(name)
 
             cpu_stats = defaultdict(dict)
 
@@ -67,6 +69,7 @@ def collect_stats(build: str, output_file: str):
             ipc = len(cpu_stats) / sum(1.0/cpu_stats[cpuid]['ipc'] for cpuid in cpu_stats)
             mpki = len(cpu_stats) / sum(1.0/cpu_stats[cpuid]['mpki'] for cpuid in cpu_stats)
             wr.write(f'{name},{ipc},{mpki}\n')
+        wr.write('\n')
     wr.close() 
 
 build = argv[1]

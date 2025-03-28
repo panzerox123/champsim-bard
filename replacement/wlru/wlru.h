@@ -24,10 +24,12 @@ private:
 
     // Definition is hard-coded for now -- need to setup ptr to DRAM
     DRAM_ADDRESS_MAPPER address_mapper;
+    MEMORY_CONTROLLER* dram;
 
     std::vector<std::vector<bool>> bank_writeback_done;
     std::vector<int> lookup_sel;
     std::vector<int> test_eviction_pos;
+    std::vector<bool> test_eviction_pos_used;
 
     const size_t set_modulus;
     const size_t ilog2_set_modulus;
