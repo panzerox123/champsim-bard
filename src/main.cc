@@ -28,6 +28,7 @@
 #include "core_inst.inc"
 #endif
 #include "defaults.hpp"
+#include "dram_channel.h"
 #include "environment.h"
 #include "ooo_cpu.h" // for O3_CPU
 #include "phase_info.h"
@@ -39,6 +40,13 @@ namespace champsim
 {
 std::vector<phase_stats> main(environment& env, std::vector<phase_info>& phases, std::vector<tracereader>& traces);
 }
+
+/*
+ * EXTERNAL OPTIONS:
+ * */
+
+DRAM_PAGE_POLICY opt_dram_page_policy;
+bool             opt_dram_ideal_wlp;
 
 #ifndef CHAMPSIM_TEST_BUILD
 using configured_environment = champsim::configured::generated_environment<CHAMPSIM_BUILD>;
@@ -98,6 +106,14 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
 
   app.add_option("traces", trace_names, "The paths to the traces")->required()->expected(NUM_CPUS)->check(CLI::ExistingFile);
 
+  /*
+   * Additional params and flags::
+   * */
+  int dram_page_policy = 0;
+
+  app.add_option("--dram-page-policy", dram_page_policy, "0 = open, 1 = close, 2 = soft-close");
+  app.add_flag("--dram-ideal-wlp", opt_dram_ideal_wlp, "enable to ensure writes go to banks uniformly");
+
   CLI11_PARSE(app, argc, argv);
 
   const bool warmup_given = (warmup_instr_option->count() > 0) || (deprec_warmup_instr_option->count() > 0);
@@ -116,6 +132,11 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
     warmup_instructions = simulation_instructions / 5;
   }
+
+  /*
+   * Additional setup:
+   * */
+  opt_dram_page_policy = static_cast<DRAM_PAGE_POLICY>(dram_page_policy);
 
   std::vector<champsim::tracereader> traces;
   std::transform(

@@ -145,6 +145,7 @@ std::vector<std::string> champsim::plain_printer::format(DRAM_CHANNEL::stats_typ
   lines.push_back(fmt::format("  WRITE DRAINS: {:10}\tFORCED: {:10}", stats.num_write_drains, stats.num_forced_write_drains));
   lines.push_back(fmt::format("  MEAN WRITE IMBALANCE: {:10}", mean(stats.tot_write_imbalance, stats.num_write_drains)));
   lines.push_back(fmt::format("  READ OCCU PRE DRAIN: {:10}\tPOST DRAIN: {:10}", mean(stats.tot_read_occu_pre_drain, stats.num_write_drains), mean(stats.tot_read_occu_post_drain, stats.num_write_drains)));
+  lines.push_back(fmt::format("  MEAN WLP: {:10}", mean(stats.tot_wlp, stats.num_write_drains)));
 
   lines.push_back(fmt::format("  READ LATENCY: {:10}", mean(stats.tot_read_latency, stats.reads)));
 

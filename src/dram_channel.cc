@@ -63,7 +63,7 @@ DRAM_CHANNEL::find_ready_request()
         {
             DRAM_COMMAND::TYPE cmd_type = is_read ? DRAM_COMMAND::TYPE::READ : DRAM_COMMAND::TYPE::WRITE;
             DRAM_COMMAND ready_cmd{req_it->value().address, cmd_type};
-            ready_cmd.autopre = true;
+            ready_cmd.autopre = do_autopre(ready_cmd);
 
             if (out.first.type == DRAM_COMMAND::TYPE::INVALID
                 || (out.second->value().ready_time > req_it->value().ready_time))
@@ -138,9 +138,7 @@ DRAM_CHANNEL::find_ready_request()
             (out.first.type == DRAM_COMMAND::TYPE::INVALID || req.ready_time < out.second->value().ready_time))
         {
             if (ready_cmd.type == DRAM_COMMAND::TYPE::READ || ready_cmd.type == DRAM_COMMAND::TYPE::WRITE)
-            {
-                ready_cmd.autopre = true;
-            }
+                ready_cmd.autopre = do_autopre(ready_cmd);
 
             out = cmd_output_type{ready_cmd, it};
         }
@@ -382,9 +380,22 @@ DRAM_CHANNEL::check_write_collision()
                 found = std::find_if(std::next(w_it), WQ.end(), checker);
 
             if (found != WQ.end())
+            {
                 w_it->reset();
+            }
             else
+            {
                 w_it->value().forward_checked = true;
+                
+                // Set bank id directly:
+                if (opt_dram_ideal_wlp)
+                {
+                    w_it->value().address = address_mapper.set_bank_idx_of_address(w_it->value().address, wlp_bank_ctr);
+                    ++wlp_bank_ctr;
+                    if (wlp_bank_ctr == num_bankgroups*num_banks)
+                        wlp_bank_ctr = 0;
+                }
+            }
         }
     }
 }
@@ -468,6 +479,9 @@ DRAM_CHANNEL::update_read_write_priority()
             sim_stats.tot_write_imbalance += *max_it - *min_it;
 
             sim_stats.tot_read_occu_post_drain += read_occu;
+            
+            size_t banks_with_writes = std::count_if(writes_per_bank.begin(), writes_per_bank.end(), [] (auto x) { return x != 0; });
+            sim_stats.tot_wlp += banks_with_writes;
         }
     }
     else if (!write_mode && ((read_occu == 0 && write_occu > 0) || write_occu >= high_watermark))
@@ -544,4 +558,33 @@ DRAM_CHANNEL::print_deadlock()
     size_t write_occu = std::count_if(WQ.begin(), WQ.end(), [] (const auto& e) { return e.has_value(); });
 
     fmt::print("\tREAD OCCU = {}, WRITE OCCU = {}\n", read_occu, write_occu);
+}
+
+bool
+DRAM_CHANNEL::do_autopre(const DRAM_COMMAND& cmd)
+{
+    if (opt_dram_page_policy == DRAM_PAGE_POLICY::OPEN)
+    {
+        return false;
+    }
+    else if (opt_dram_page_policy == DRAM_PAGE_POLICY::CLOSE)
+    {
+        return true;
+    }
+    else
+    {
+        auto& q = write_mode ? WQ : RQ;
+
+        size_t b_idx = address_mapper.bank_idx(cmd.address),
+               row = address_mapper.row(cmd.address);
+
+        bool no_row_hits = std::none_of(q.begin(), q.end(),
+                                [this, b_idx, row] (const auto& e) 
+                                {
+                                    return e.has_value()
+                                        && this->address_mapper.bank_idx(e.value().address) == b_idx
+                                        && this->address_mapper.row(e.value().address) == row;
+                                });
+        return no_row_hits;
+    }
 }

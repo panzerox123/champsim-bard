@@ -51,6 +51,8 @@ public:
 
     size_t bank_idx(champsim::address) const;
 
+    champsim::address set_bank_idx_of_address(champsim::address, size_t bank_idx) const;
+
     void print_address_mapping() const;
 };
 

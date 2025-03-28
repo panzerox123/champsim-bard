@@ -22,6 +22,8 @@
 #include <utility>
 #include <vector>
 
+enum class DRAM_PAGE_POLICY { OPEN =0, CLOSE =1, SOFT_CLOSE =2 };
+
 struct DRAM_COMMAND
 {
     enum class TYPE { INVALID, READ, WRITE, ACTIVATE, PRECHARGE };
@@ -110,6 +112,8 @@ private:
 
     std::ofstream logger{};
     champsim::chrono::clock::time_point last_cas_command_time{};
+
+    size_t wlp_bank_ctr =0;
 public:
     DRAM_CHANNEL(champsim::chrono::picoseconds mc_period,
                 std::size_t rq_size, std::size_t wq_size,
@@ -131,6 +135,14 @@ public:
 
     long operate() final;
     void print_deadlock() final;
+private:
+    bool do_autopre(const DRAM_COMMAND&);
 };
+
+/*
+ * Command-line options:
+ * */
+extern DRAM_PAGE_POLICY opt_dram_page_policy;
+extern bool             opt_dram_ideal_wlp;
 
 #endif   // DRAM_CHANNEL_h
