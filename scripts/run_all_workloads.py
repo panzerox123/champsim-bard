@@ -16,14 +16,15 @@ def get_name(filename: str, suite: str) -> str:
         right = filename.find('.simlarge')
     return filename[left:right].lower()
 
-build = argv[1]
-rate = int(argv[2])
+output_folder_name = argv[1]
+build = argv[2]
+cmd_options = argv[3]
 
 INST_SIM = 100_000_000
 INST_WARMUP = 25_000_000
 
 for suite in SUITES:
-    output_folder = f'out/{build}/{suite}'
+    output_folder = f'out/{output_folder_name}/{suite}'
     if not os.path.isdir(output_folder):
         os.system(f'mkdir -p {output_folder}')
 
@@ -33,5 +34,5 @@ for suite in SUITES:
         name = get_name(trace, suite)
         trace_filepath = f'{trace_folder}/{trace}'
 
-        trace_part = ' '.join([trace_filepath for _ in range(rate)])
-        print(f'./bin/{build} {trace_part} --warmup-instructions {INST_WARMUP} --simulation-instructions {INST_SIM} > {output_folder}/{name}.out')
+        trace_part = ' '.join([trace_filepath for _ in range(8)])
+        print(f'./bin/{build} {trace_part} --warmup-instructions {INST_WARMUP} --simulation-instructions {INST_SIM} {cmd_options} > {output_folder}/{name}.out')
