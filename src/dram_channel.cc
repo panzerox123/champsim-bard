@@ -391,6 +391,7 @@ DRAM_CHANNEL::check_write_collision()
                 if (opt_dram_ideal_wlp)
                 {
                     w_it->value().address = address_mapper.set_bank_idx_of_address(w_it->value().address, wlp_bank_ctr);
+
                     ++wlp_bank_ctr;
                     if (wlp_bank_ctr == num_bankgroups*num_banks)
                         wlp_bank_ctr = 0;
@@ -579,9 +580,11 @@ DRAM_CHANNEL::do_autopre(const DRAM_COMMAND& cmd)
                row = address_mapper.row(cmd.address);
 
         bool no_row_hits = std::none_of(q.begin(), q.end(),
-                                [this, b_idx, row] (const auto& e) 
+                                [this, b_idx, row, address=cmd.address] (const auto& e) 
                                 {
                                     return e.has_value()
+                                        && !e.value().scheduled
+                                        && e.value().address != address
                                         && this->address_mapper.bank_idx(e.value().address) == b_idx
                                         && this->address_mapper.row(e.value().address) == row;
                                 });

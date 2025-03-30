@@ -140,6 +140,10 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
    * Additional setup:
    * */
   opt_dram_page_policy = static_cast<DRAM_PAGE_POLICY>(dram_page_policy);
+  std::cout << "dram page policy: is open = " << (opt_dram_page_policy == DRAM_PAGE_POLICY::OPEN)
+      << "\tis close = " << (opt_dram_page_policy == DRAM_PAGE_POLICY::CLOSE)
+      << "\tis soft close = " << (opt_dram_page_policy == DRAM_PAGE_POLICY::SOFT_CLOSE)
+      << "\tcmd arg = " << dram_page_policy << "\n";
 
   std::vector<champsim::tracereader> traces;
   std::transform(
