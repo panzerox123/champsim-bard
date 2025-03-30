@@ -1,4 +1,4 @@
-#include "wlru.h"
+#include "wlru_soft_soft.h"
 
 #include "champsim.h"
 
@@ -6,17 +6,18 @@
 #include <cassert>
 #include <iostream>
 
-wlru::wlru(CACHE* cache)
-    :wlru(cache, cache->NUM_SET, cache->NUM_WAY)
+wlru_soft::wlru_soft(CACHE* cache)
+    :wlru_soft(cache, cache->NUM_SET, cache->NUM_WAY)
 {}
 
-wlru::wlru(CACHE* cache, long sets, long ways)
+wlru_soft::wlru_soft(CACHE* cache, long sets, long ways)
     :replacement(cache),
     NUM_WAYS(ways),
     last_used_cycles(static_cast<std::size_t>(sets * ways), 0),
     address_mapper(cache->dram->address_mapper),
     dram(cache->dram),
-    bank_writeback_done(cache->dram->num_channels, std::vector<bool>(cache->dram->num_bankgroups*cache->dram->num_banks, false)),
+    bankgroup_write_counters(cache->dram->num_channels, std::vector<size_t>(cache->dram->num_bankgroups, 0)),
+    bank_open_row_ids(cache->dram->num_channels, std::vector<size_t>(cache->dram->num_bankgroups*cache->dram->num_banks)),
     lookup_sel(ways, SEL_INIT),
     test_eviction_pos(static_cast<std::size_t>(sets*ways), -1),
     test_eviction_pos_used(static_cast<std::size_t>(sets*ways), false),
@@ -25,11 +26,11 @@ wlru::wlru(CACHE* cache, long sets, long ways)
 {}
 
 void
-wlru::initialize_replacement()
+wlru_soft::initialize_replacement()
 {
 }
 
-long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, const champsim::cache_block* current_set, champsim::address ip,
+long wlru_soft::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, const champsim::cache_block* current_set, champsim::address ip,
                       champsim::address full_addr, access_type type)
 {
     auto begin = std::next(std::begin(last_used_cycles), set * NUM_WAYS);
@@ -52,7 +53,9 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
     bool victim_was_dirty = false;
     size_t victim_way;
     size_t victim_channel;
+    size_t victim_bankgroup;
     size_t victim_bank_idx;
+    size_t victim_row_id;
     size_t victim_lru_pos;
 
     size_t ii = 0;
@@ -64,9 +67,13 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
         {
             auto address = current_set[ii].address;
             size_t channel = address_mapper.channel(address),
-                   b_idx = address_mapper.bank_idx(address);
-            bool prio = !bank_writeback_done[channel][b_idx];
+                   bg = address_mapper.bankgroup(address),
+                   b_idx = address_mapper.bank_idx(address)
+                   row_id = address_mapper.row_id(address);
+
             bool dirty = current_set[ii].dirty;
+            bool prio = (bankgroup_write_counters[bg] < address_mapper.banks)
+                        && (!bank_open_row_ids[b_idx].has_value() || bank_open_row_ids[b_idx].value() == row_id);
 
             bool evict;            
             if (victim == end)
@@ -80,9 +87,9 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
                 if (dirty && victim_was_dirty)
                     evict = ((prio == victim_has_writeback_priority) && lru_cmp) || ((prio != victim_has_writeback_priority) && prio);
                 else if (dirty)
-                    evict = prio || (lru_cmp && victim_has_writeback_priority);
+                    evict = prio;
                 else if (victim_was_dirty)
-                    evict = !victim_has_writeback_priority && (lru_cmp || !prio);
+                    evict = !victim_has_writeback_priority;
                 else
                     evict = lru_cmp;
             }
@@ -95,7 +102,9 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
 
                 victim_way = ii;
                 victim_channel = channel;
+                victim_bankgroup = bg;
                 victim_bank_idx = b_idx;
+                victim_row_id = row_id;
                 victim_lru_pos = lru_pos;
             }
         }
@@ -115,7 +124,9 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
 
         auto address = current_set[victim_way].address;
         victim_channel = address_mapper.channel(address);
+        victim_bankgroup = address_mapper.bankgroup(address);
         victim_bank_idx = address_mapper.bank_idx(address);
+        victim_row_id = address_mapper.row(address);
 
         // Check if `test_eviction_pos` is set for the LRU victim:
         if (test_eviction_pos[set*NUM_WAYS + victim_way] >= 0 && !test_eviction_pos_used[set*NUM_WAYS + victim_way])
@@ -134,13 +145,19 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
 
     if (victim_was_dirty)
     {
-        auto& wb = bank_writeback_done[victim_channel];
+        auto& wbg = bankgroup_write_counters[victim_channel];
+        auto& wba = bank_open_row_ids[victim_channel];
 
-        wb[victim_bank_idx] = true;
+        ++wbg[victim_bankgroup];
+        wba[victim_bank_idx] = victim_row_id;
 
-        bool all_done = std::all_of(wb.begin(), wb.end(), [] (bool x) { return x; });
+        bool all_done = std::all_of(wbg.begin(), wbg.end(), [m=address_mapper.banks] (auto x) { return x == m; });
         if (all_done)
-            std::fill(wb.begin(), wb.end(), false);
+        {
+            std::fill(wbg.begin(), wbg.end(), 0);
+            for (auto& r : wba)
+                r.reset();
+        }
     }
 
     // Find the way whose last use cycle is most distant
@@ -149,7 +166,7 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
     return victim_way;
 }
 
-void wlru::replacement_cache_fill(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip, champsim::address victim_addr,
+void wlru_soft::replacement_cache_fill(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip, champsim::address victim_addr,
                                  access_type type)
 {
     // Mark the way as being used on the current cycle
@@ -160,7 +177,7 @@ void wlru::replacement_cache_fill(uint32_t triggering_cpu, long set, long way, c
     test_eviction_pos_used[set*NUM_WAYS + way] = false;
 }
 
-void wlru::update_replacement_state(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip,
+void wlru_soft::update_replacement_state(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip,
                                    champsim::address victim_addr, access_type type, uint8_t hit)
 {
     // Mark the way as being used on the current cycle
@@ -192,13 +209,13 @@ void wlru::update_replacement_state(uint32_t triggering_cpu, long set, long way,
 }
 
 void
-wlru::replacement_final_stats()
+wlru_soft::replacement_final_stats()
 {
     fmt::print("WCACHE NON LRU EVICTS: {}\tTOTAL EVICTS: {}\n", s_non_lru_evicts, s_total_evicts);
 }
 
 size_t
-wlru::compute_max_lookup() const
+wlru_soft::compute_max_lookup() const
 {
     size_t num_drains = 0, num_forced_drains = 0;
     for (size_t i = 0; i < dram->channels.size(); i++)
