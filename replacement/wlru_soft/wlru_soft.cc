@@ -1,4 +1,4 @@
-#include "wlru_soft_soft.h"
+#include "wlru_soft.h"
 
 #include "champsim.h"
 
@@ -17,7 +17,7 @@ wlru_soft::wlru_soft(CACHE* cache, long sets, long ways)
     address_mapper(cache->dram->address_mapper),
     dram(cache->dram),
     bankgroup_write_counters(cache->dram->num_channels, std::vector<size_t>(cache->dram->num_bankgroups, 0)),
-    bank_open_row_ids(cache->dram->num_channels, std::vector<size_t>(cache->dram->num_bankgroups*cache->dram->num_banks)),
+    bank_open_row_ids(cache->dram->num_channels, std::vector<std::optional<size_t>>(cache->dram->num_bankgroups*cache->dram->num_banks)),
     lookup_sel(ways, SEL_INIT),
     test_eviction_pos(static_cast<std::size_t>(sets*ways), -1),
     test_eviction_pos_used(static_cast<std::size_t>(sets*ways), false),
@@ -68,12 +68,12 @@ long wlru_soft::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
             auto address = current_set[ii].address;
             size_t channel = address_mapper.channel(address),
                    bg = address_mapper.bankgroup(address),
-                   b_idx = address_mapper.bank_idx(address)
-                   row_id = address_mapper.row_id(address);
+                   b_idx = address_mapper.bank_idx(address),
+                   row_id = address_mapper.row(address);
 
             bool dirty = current_set[ii].dirty;
-            bool prio = (bankgroup_write_counters[bg] < address_mapper.banks)
-                        && (!bank_open_row_ids[b_idx].has_value() || bank_open_row_ids[b_idx].value() == row_id);
+            bool prio = (bankgroup_write_counters[channel][bg] < address_mapper.banks)
+                        && (!bank_open_row_ids[channel][b_idx].has_value() || bank_open_row_ids[channel][b_idx].value() == row_id);
 
             bool evict;            
             if (victim == end)
@@ -87,9 +87,9 @@ long wlru_soft::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
                 if (dirty && victim_was_dirty)
                     evict = ((prio == victim_has_writeback_priority) && lru_cmp) || ((prio != victim_has_writeback_priority) && prio);
                 else if (dirty)
-                    evict = prio;
+                    evict = prio || (lru_cmp && victim_has_writeback_priority);
                 else if (victim_was_dirty)
-                    evict = !victim_has_writeback_priority;
+                    evict = !victim_has_writeback_priority && (lru_cmp || !prio);
                 else
                     evict = lru_cmp;
             }
@@ -151,7 +151,7 @@ long wlru_soft::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
         ++wbg[victim_bankgroup];
         wba[victim_bank_idx] = victim_row_id;
 
-        bool all_done = std::all_of(wbg.begin(), wbg.end(), [m=address_mapper.banks] (auto x) { return x == m; });
+        bool all_done = std::all_of(wbg.begin(), wbg.end(), [m=address_mapper.banks] (auto x) { return x >= m; });
         if (all_done)
         {
             std::fill(wbg.begin(), wbg.end(), 0);
