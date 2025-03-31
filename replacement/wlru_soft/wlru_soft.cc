@@ -51,6 +51,7 @@ long wlru_soft::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
     auto victim = end;
     bool victim_has_writeback_priority = false;
     bool victim_was_dirty = false;
+
     size_t victim_way;
     size_t victim_channel;
     size_t victim_bankgroup;
@@ -87,9 +88,9 @@ long wlru_soft::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
                 if (dirty && victim_was_dirty)
                     evict = ((prio == victim_has_writeback_priority) && lru_cmp) || ((prio != victim_has_writeback_priority) && prio);
                 else if (dirty)
-                    evict = prio || (lru_cmp && victim_has_writeback_priority);
+                    evict = prio || lru_cmp;
                 else if (victim_was_dirty)
-                    evict = !victim_has_writeback_priority && (lru_cmp || !prio);
+                    evict = !victim_has_writeback_priority && lru_cmp;
                 else
                     evict = lru_cmp;
             }
