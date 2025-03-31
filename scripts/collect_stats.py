@@ -10,7 +10,7 @@ SUITES = ['spec2017', 'ligra', 'stream']
 
 def collect_stats(build: str, output_file: str):
     wr = open(output_file, 'w')
-    wr.write('Workload,IPC,MPKI\n')
+    wr.write('Workload,IPC,MPKI,Write-Read-Ratio\n')
 
     for suite in SUITES:
         data_folder = f'out/{build}/{suite}'
@@ -25,6 +25,7 @@ def collect_stats(build: str, output_file: str):
             print(name)
 
             cpu_stats = defaultdict(dict)
+            dram_stats = {}
 
             # READ FILE:
             with open(data_file, 'r') as rd:
@@ -64,11 +65,27 @@ def collect_stats(build: str, output_file: str):
                         mpki = (misses * 1000)/cpu_stats[cpuid]['inst']
                         cpu_stats[cpuid]['mpki'] = mpki
                     line = rd.readline().strip()
+                    
+                # Get number of reads and writes:
+                dram_reads, dram_writes = 0, 0
+                for i in range(2):
+                    while f'Channel {i}' not in line:
+                        line = rd.readline()
+                    left, right = line.find('READ REQS:')+len('READ REQS:'), line.find('WRITE REQS:')
+                    reads = int(line[left:right])
 
+                    left, right = line.find('WRITE REQS:')+len('WRITE REQS:'), len(line)
+                    writes = int(line[left:right])
+
+                    dram_reads += reads
+                    dram_writes += writes
+                dram_stats['reads'] = dram_reads
+                dram_stats['writes'] = dram_writes
             # Write stats to csv file:
             ipc = len(cpu_stats) / sum(1.0/cpu_stats[cpuid]['ipc'] for cpuid in cpu_stats)
             mpki = len(cpu_stats) / sum(1.0/cpu_stats[cpuid]['mpki'] for cpuid in cpu_stats)
-            wr.write(f'{name},{ipc},{mpki}\n')
+            write_read_ratio = dram_stats['writes'] / dram_stats['reads']
+            wr.write(f'{name},{ipc},{mpki},{write_read_ratio}\n')
         wr.write('\n')
     wr.close() 
 

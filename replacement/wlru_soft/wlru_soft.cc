@@ -189,8 +189,7 @@ void wlru_soft::update_replacement_state(uint32_t triggering_cpu, long set, long
             int p = test_eviction_pos[set*NUM_WAYS + way];
             if (p >= 0)
             {
-                if (lookup_sel[p] > SEL_MIN)
-                    --lookup_sel[p];
+                lookup_sel[p] -= (lookup_sel[p] >> 2);
                 test_eviction_pos_used[set*NUM_WAYS + way] = true;
             }
         }
@@ -201,8 +200,7 @@ void wlru_soft::update_replacement_state(uint32_t triggering_cpu, long set, long
 
             if (p >= 0)
             {
-                if (lookup_sel[p] > SEL_MIN)
-                    --lookup_sel[p];
+                lookup_sel[p] -= (lookup_sel[p] >> 2);
                 test_eviction_pos_used[set*NUM_WAYS + way] = true;
             }
         }
@@ -218,6 +216,7 @@ wlru_soft::replacement_final_stats()
 size_t
 wlru_soft::compute_max_lookup() const
 {
+    /*
     size_t num_drains = 0, num_forced_drains = 0;
     for (size_t i = 0; i < dram->channels.size(); i++)
     {
@@ -230,7 +229,11 @@ wlru_soft::compute_max_lookup() const
         if (ratio < 0.05)
             return 1;
     }
-    auto it = std::find_if(lookup_sel.rbegin(), lookup_sel.rend(),
-                    [] (auto x) { return x >= SEL_THRESHOLD; });
-    return static_cast<size_t>(NUM_WAYS - std::distance(lookup_sel.rbegin(), it));
+    */
+//  auto it = std::find_if(lookup_sel.rbegin(), lookup_sel.rend(),
+//                  [] (auto x) { return x >= SEL_THRESHOLD; });
+//  return static_cast<size_t>(NUM_WAYS - std::distance(lookup_sel.rbegin(), it));
+    auto it = std::find_if(lookup_sel.begin(), lookup_sel.end(),
+                    [] (auto x) { return x < SEL_THRESHOLD; });
+    return std::distance(lookup_sel.begin(), it);
 }
