@@ -80,9 +80,9 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
                 if (dirty && victim_was_dirty)
                     evict = ((prio == victim_has_writeback_priority) && lru_cmp) || ((prio != victim_has_writeback_priority) && prio);
                 else if (dirty)
-                    evict = prio || (lru_cmp && victim_has_writeback_priority);
+                    evict = prio || lru_cmp;
                 else if (victim_was_dirty)
-                    evict = !victim_has_writeback_priority && (lru_cmp || !prio);
+                    evict = !victim_has_writeback_priority && lru_cmp;
                 else
                     evict = lru_cmp;
             }
@@ -171,7 +171,7 @@ void wlru::update_replacement_state(uint32_t triggering_cpu, long set, long way,
             int p = test_eviction_pos[set*NUM_WAYS + way];
             if (p >= 0)
             {
-                if (lookup_sel[p] >= SEL_MIN)
+                if (lookup_sel[p] > SEL_MIN)
                     --lookup_sel[p];
                 test_eviction_pos_used[set*NUM_WAYS + way] = true;
             }

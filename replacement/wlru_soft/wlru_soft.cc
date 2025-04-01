@@ -115,6 +115,13 @@ long wlru_soft::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
     // If this is a sampled set, record the victim's lru position and select the true LRU victim.
     if (is_sampled_set(set))
     {
+        // If the evition pos of the simulated victim is already set, consume it:
+        if (test_eviction_pos[set*NUM_WAYS + victim_way] >= 0 && !test_eviction_pos_used[set*NUM_WAYS + victim_way])
+        {
+            size_t p = test_eviction_pos[set*NUM_WAYS + victim_way];
+            if (lookup_sel[p] < SEL_MAX)
+                ++lookup_sel[p];
+        }
         test_eviction_pos[set*NUM_WAYS + victim_way] = victim_lru_pos;
 
         // Get LRU victim:
@@ -201,7 +208,7 @@ void wlru_soft::update_replacement_state(uint32_t triggering_cpu, long set, long
 
             if (p >= 0)
             {
-                lookup_sel[p] -= (lookup_sel[p] >> 2);
+                lookup_sel[p] -= (lookup_sel[p] >> 3);
                 test_eviction_pos_used[set*NUM_WAYS + way] = true;
             }
         }
@@ -231,10 +238,10 @@ wlru_soft::compute_max_lookup() const
             return 1;
     }
     */
-//  auto it = std::find_if(lookup_sel.rbegin(), lookup_sel.rend(),
-//                  [] (auto x) { return x >= SEL_THRESHOLD; });
-//  return static_cast<size_t>(NUM_WAYS - std::distance(lookup_sel.rbegin(), it));
-    auto it = std::find_if(lookup_sel.begin(), lookup_sel.end(),
-                    [] (auto x) { return x < SEL_THRESHOLD; });
-    return std::distance(lookup_sel.begin(), it);
+    auto it = std::find_if(lookup_sel.rbegin(), lookup_sel.rend(),
+                    [] (auto x) { return x >= SEL_THRESHOLD; });
+    return static_cast<size_t>(NUM_WAYS - std::distance(lookup_sel.rbegin(), it));
+//  auto it = std::find_if(lookup_sel.begin(), lookup_sel.end(),
+//                  [] (auto x) { return x < SEL_THRESHOLD; });
+//  return std::distance(lookup_sel.begin(), it);
 }
