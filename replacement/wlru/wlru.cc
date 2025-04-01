@@ -171,7 +171,8 @@ void wlru::update_replacement_state(uint32_t triggering_cpu, long set, long way,
             int p = test_eviction_pos[set*NUM_WAYS + way];
             if (p >= 0)
             {
-                lookup_sel[p] -= (lookup_sel[p] >> 2);
+                if (lookup_sel[p] >= SEL_MIN)
+                    --lookup_sel[p];
                 test_eviction_pos_used[set*NUM_WAYS + way] = true;
             }
         }

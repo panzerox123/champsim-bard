@@ -6,7 +6,7 @@ from sys import argv
 from collections import defaultdict
 import os
 
-SUITES = ['spec2017', 'ligra', 'stream']
+SUITES = ['spec2017', 'ligra']
 
 def collect_stats(build: str, output_file: str):
     wr = open(output_file, 'w')
