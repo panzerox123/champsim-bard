@@ -37,7 +37,6 @@ long wlru_soft::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
     auto end = std::next(begin, NUM_WAYS);
 
     // Compute max lookup:
-    const size_t max_lookup = is_sampled_set(set) ? NUM_WAYS : compute_max_lookup();
 
     if (s_total_evicts % 100'000 == 0)
     {
@@ -58,71 +57,95 @@ long wlru_soft::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
     size_t victim_bank_idx;
     size_t victim_row_id;
     size_t victim_lru_pos;
-
-    size_t ii = 0;
-    for (auto it = begin; it != end; it++)
+    
+    if (is_sampled_set(set))
     {
-        size_t lru_pos = std::count_if(begin, end,
-                                [t=*it] (auto x) { return t > x; });
-        if (lru_pos < max_lookup)
+        // Random selection:
+        size_t rand_idx = static_cast<size_t>(std::rand()) % NUM_WAYS;
+        victim = std::next(begin, rand_idx);
+
+        victim_was_dirty = current_set[rand_idx].dirty;
+        victim_way = rand_idx;
+
+        auto address = current_set[rand_idx].address;
+        victim_channel = address_mapper.channel(address);
+        victim_bankgroup = address_mapper.bankgroup(address);
+        victim_bank_idx = address_mapper.bank_idx(address);
+        victim_row_id = address_mapper.row(address);
+
+        victim_lru_pos = std::count_if(begin, end,
+                                [t=*victim] (auto x) { return t > x; });
+    }
+    else
+    {
+        const size_t max_lookup = compute_max_lookup();
+
+        size_t ii = 0;
+        for (auto it = begin; it != end; it++)
         {
-            auto address = current_set[ii].address;
-            size_t channel = address_mapper.channel(address),
-                   bg = address_mapper.bankgroup(address),
-                   b_idx = address_mapper.bank_idx(address),
-                   row_id = address_mapper.row(address);
-
-            bool dirty = current_set[ii].dirty;
-            bool prio = (bankgroup_write_counters[channel][bg] < address_mapper.banks)
-                        && (!bank_open_row_ids[channel][b_idx].has_value() || bank_open_row_ids[channel][b_idx].value() == row_id);
-
-            bool evict;            
-            if (victim == end)
+            size_t lru_pos = std::count_if(begin, end,
+                                    [t=*it] (auto x) { return t > x; });
+            if (lru_pos < max_lookup)
             {
-                evict = true;
-            }
-            else
-            {
-                bool lru_cmp = *it < *victim;
-                
-                if (dirty && victim_was_dirty)
-                    evict = ((prio == victim_has_writeback_priority) && lru_cmp) || ((prio != victim_has_writeback_priority) && prio);
-                else if (dirty)
-                    evict = prio || lru_cmp;
-                else if (victim_was_dirty)
-                    evict = !victim_has_writeback_priority && lru_cmp;
+                auto address = current_set[ii].address;
+                size_t channel = address_mapper.channel(address),
+                       bg = address_mapper.bankgroup(address),
+                       b_idx = address_mapper.bank_idx(address),
+                       row_id = address_mapper.row(address);
+
+                bool dirty = current_set[ii].dirty;
+                bool prio = (bankgroup_write_counters[channel][bg] < address_mapper.banks)
+                            && (!bank_open_row_ids[channel][b_idx].has_value() || bank_open_row_ids[channel][b_idx].value() == row_id);
+
+                bool evict;            
+                if (victim == end)
+                {
+                    evict = true;
+                }
                 else
-                    evict = lru_cmp;
-            }
+                {
+                    bool lru_cmp = *it < *victim;
+                    
+                    if (dirty && victim_was_dirty)
+                        evict = ((prio == victim_has_writeback_priority) && lru_cmp) || ((prio != victim_has_writeback_priority) && prio);
+                    else if (dirty)
+                        evict = prio || (lru_cmp && !victim_has_writeback_priority);
+                    else if (victim_was_dirty)
+                        evict = !victim_has_writeback_priority && (lru_cmp && !prio);
+                    else
+                        evict = lru_cmp;
+                }
 
-            if (evict)
-            {
-                victim = it;
-                victim_has_writeback_priority = prio;
-                victim_was_dirty = dirty;
+                if (evict)
+                {
+                    victim = it;
+                    victim_has_writeback_priority = prio;
+                    victim_was_dirty = dirty;
 
-                victim_way = ii;
-                victim_channel = channel;
-                victim_bankgroup = bg;
-                victim_bank_idx = b_idx;
-                victim_row_id = row_id;
-                victim_lru_pos = lru_pos;
+                    victim_way = ii;
+                    victim_channel = channel;
+                    victim_bankgroup = bg;
+                    victim_bank_idx = b_idx;
+                    victim_row_id = row_id;
+                    victim_lru_pos = lru_pos;
+                }
             }
+            ++ii;
         }
-        ++ii;
     }
 
     // If this is a sampled set, record the victim's lru position and select the true LRU victim.
     if (is_sampled_set(set))
     {
+        size_t pos_idx = set*NUM_WAYS + victim_way;
         // If the evition pos of the simulated victim is already set, consume it:
-        if (test_eviction_pos[set*NUM_WAYS + victim_way] >= 0 && !test_eviction_pos_used[set*NUM_WAYS + victim_way])
+        if (test_eviction_pos[pos_idx] >= 0 && !test_eviction_pos_used[pos_idx])
         {
-            size_t p = test_eviction_pos[set*NUM_WAYS + victim_way];
+            auto p = test_eviction_pos[pos_idx];
             if (lookup_sel[p] < SEL_MAX)
                 ++lookup_sel[p];
         }
-        test_eviction_pos[set*NUM_WAYS + victim_way] = victim_lru_pos;
+        test_eviction_pos[pos_idx] = victim_lru_pos;
 
         // Get LRU victim:
         victim = std::min_element(begin, end);
@@ -137,6 +160,7 @@ long wlru_soft::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
         victim_row_id = address_mapper.row(address);
 
         // Check if `test_eviction_pos` is set for the LRU victim:
+        size_t pos_idx = set*NUM_WAYS + victim_way;
         if (test_eviction_pos[set*NUM_WAYS + victim_way] >= 0 && !test_eviction_pos_used[set*NUM_WAYS + victim_way])
         {
             size_t p = test_eviction_pos[set*NUM_WAYS + victim_way];
@@ -189,27 +213,28 @@ void wlru_soft::update_replacement_state(uint32_t triggering_cpu, long set, long
                                    champsim::address victim_addr, access_type type, uint8_t hit)
 {
     // Mark the way as being used on the current cycle
+    size_t pos_idx = set*NUM_WAYS + way;
     if (hit)
     {
         if (access_type{type} == access_type::WRITE)
         {
-            int p = test_eviction_pos[set*NUM_WAYS + way];
+            int p = test_eviction_pos[pos_idx];
             if (p >= 0)
             {
                 if (lookup_sel[p] > SEL_MIN)
                     --lookup_sel[p];
-                test_eviction_pos_used[set*NUM_WAYS + way] = true;
+                test_eviction_pos_used[pos_idx] = true;
             }
         }
         else
         {
-            last_used_cycles.at((std::size_t)(set * NUM_WAYS + way)) = cycle++;
-            int p = test_eviction_pos[set*NUM_WAYS + way];
+            last_used_cycles.at((std::size_t)pos_idx) = cycle++;
 
+            int p = test_eviction_pos[pos_idx];
             if (p >= 0)
             {
                 lookup_sel[p] -= (lookup_sel[p] >> 3);
-                test_eviction_pos_used[set*NUM_WAYS + way] = true;
+                test_eviction_pos_used[pos_idx] = true;
             }
         }
     }
@@ -224,24 +249,7 @@ wlru_soft::replacement_final_stats()
 size_t
 wlru_soft::compute_max_lookup() const
 {
-    /*
-    size_t num_drains = 0, num_forced_drains = 0;
-    for (size_t i = 0; i < dram->channels.size(); i++)
-    {
-        num_drains += dram->channels[i]->sim_stats.num_write_drains;
-        num_forced_drains += dram->channels[i]->sim_stats.num_forced_write_drains;
-    }
-    if (num_drains > 256)
-    {
-        double ratio = ((double)num_forced_drains)/((double)num_drains);
-        if (ratio < 0.05)
-            return 1;
-    }
-    */
-    auto it = std::find_if(lookup_sel.rbegin(), lookup_sel.rend(),
-                    [] (auto x) { return x >= SEL_THRESHOLD; });
-    return static_cast<size_t>(NUM_WAYS - std::distance(lookup_sel.rbegin(), it));
-//  auto it = std::find_if(lookup_sel.begin(), lookup_sel.end(),
-//                  [] (auto x) { return x < SEL_THRESHOLD; });
-//  return std::distance(lookup_sel.begin(), it);
+    auto it = std::find_if(lookup_sel.begin(), lookup_sel.end(),
+                    [] (auto x) { return x < SEL_THRESHOLD; });
+    return std::distance(lookup_sel.begin(), it);
 }
