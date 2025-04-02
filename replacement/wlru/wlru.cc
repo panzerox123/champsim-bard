@@ -37,6 +37,7 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
     auto end = std::next(begin, NUM_WAYS);
 
     // Compute max lookup:
+    const size_t max_lookup = compute_max_lookup();
 
     if (s_total_evicts % 100'000 == 0)
     {
@@ -78,8 +79,6 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
     }
     else
     {
-        const size_t max_lookup = compute_max_lookup();
-
         size_t ii = 0;
         for (auto it = begin; it != end; it++)
         {
@@ -160,7 +159,7 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
         victim_row_id = address_mapper.row(address);
 
         // Check if `test_eviction_pos` is set for the LRU victim:
-        size_t pos_idx = set*NUM_WAYS + victim_way;
+        pos_idx = set*NUM_WAYS + victim_way;
         if (test_eviction_pos[set*NUM_WAYS + victim_way] >= 0 && !test_eviction_pos_used[set*NUM_WAYS + victim_way])
         {
             size_t p = test_eviction_pos[set*NUM_WAYS + victim_way];

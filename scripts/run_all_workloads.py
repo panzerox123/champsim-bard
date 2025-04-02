@@ -1,10 +1,10 @@
 from sys import argv
 import os
 
-SUITES = ['spec2017', 'ligra', 'stream']
+SUITES = ['spec2017', 'ligra', 'stream', 'dacapo', 'java_benchbase', 'google']
 
 def get_name(filename: str, suite: str) -> str:
-    left, right = 0, filename.find('.champsimtrace.xz')
+    left, right = 0, filename.find('.champsim')
     if suite == 'spec2017':
         left = len('6xx.')
         right = filename.find('_s')
@@ -20,7 +20,7 @@ output_folder_name = argv[1]
 build = argv[2]
 cmd_options = argv[3]
 
-INST_SIM = 100_000_000
+INST_SIM = 50_000_000
 INST_WARMUP = 25_000_000
 
 for suite in SUITES:
@@ -29,7 +29,7 @@ for suite in SUITES:
         os.system(f'mkdir -p {output_folder}')
 
     trace_folder = f'../frost/TRACES/ctf/{suite}'
-    traces = [f for f in os.listdir(trace_folder) if f.endswith('.xz')]
+    traces = [f for f in os.listdir(trace_folder) if f.endswith('.xz') or f.endswith('.gz')]
     for trace in traces:
         name = get_name(trace, suite)
         trace_filepath = f'{trace_folder}/{trace}'
