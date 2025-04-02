@@ -22,11 +22,12 @@ private:
     std::vector<uint64_t> last_used_cycles;
     uint64_t cycle = 0;
 
-    // Definition is hard-coded for now -- need to setup ptr to DRAM
     DRAM_ADDRESS_MAPPER address_mapper;
     MEMORY_CONTROLLER* dram;
 
-    std::vector<std::vector<bool>> bank_writeback_done;
+    std::vector<std::vector<size_t>> bankgroup_write_counters;
+    std::vector<std::vector<std::optional<size_t>>> bank_open_row_ids;
+
     std::vector<int> lookup_sel;
     std::vector<int> test_eviction_pos;
     std::vector<bool> test_eviction_pos_used;
