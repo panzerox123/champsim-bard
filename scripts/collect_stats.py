@@ -6,7 +6,7 @@ from sys import argv
 from collections import defaultdict
 import os
 
-SUITES = ['spec2017', 'ligra', 'stream', 'dacapo', 'java_benchbase', 'google']
+SUITES = ['spec2017', 'ligra', 'stream', 'google']
 
 def read_stat_from_line(line: str, start_string: str, end_string: str):
     left = line.find(start_string) + len(start_string)
