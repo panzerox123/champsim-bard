@@ -7,6 +7,25 @@
 #include "dram_address.h"
 #include "modules.h"
 
+struct victim_data
+{
+    std::vector<uint64_t>::iterator iter;
+
+    bool priority =false;
+    bool dirty =false;
+
+    long way_id;
+
+    size_t channel;
+    size_t bankgroup;
+    size_t bank_idx;
+    size_t row;
+    
+    size_t lru_pos;
+};
+
+void set_victim_data(victim_data&, size_t idx, const champsim::cache_block* set);
+
 class wlru : public champsim::modules::replacement
 {
 private:
@@ -28,9 +47,11 @@ private:
     std::vector<std::vector<size_t>> bankgroup_write_counters;
     std::vector<std::vector<std::optional<size_t>>> bank_open_row_ids;
 
-    std::vector<int> lookup_sel;
+    std::vector<int> evict_lookup_sel;
+    std::vector<int> eager_lookup_sel;
+
     std::vector<int> test_eviction_pos;
-    std::vector<bool> test_eviction_pos_used;
+    std::vector<int> test_eager_pos;
 
     const size_t set_modulus;
     const size_t ilog2_set_modulus;
@@ -39,6 +60,7 @@ private:
      * */
     uint32_t s_non_lru_evicts =0;
     uint32_t s_total_evicts =0;
+    uint32_t s_eager_writebacks =0;
 public:
     explicit wlru(CACHE* cache);
     wlru(CACHE* cache, long sets, long ways);
@@ -54,7 +76,10 @@ public:
 
     void replacement_final_stats();
 private:
-    size_t compute_max_lookup(void) const;
+    void set_victim_data(victim_data&, size_t idx, const champsim::cache_block* current_set);
+
+    long find_eager_candidate(long set, const champsim::cache_block* current_set);
+    size_t compute_max_lookup(std::vector<int>::const_iterator, std::vector<int>::const_iterator) const;
 
     inline bool is_sampled_set(size_t idx) const
     {

@@ -18,9 +18,10 @@ wlru::wlru(CACHE* cache, long sets, long ways)
     dram(cache->dram),
     bankgroup_write_counters(cache->dram->num_channels, std::vector<size_t>(cache->dram->num_bankgroups, 0)),
     bank_open_row_ids(cache->dram->num_channels, std::vector<std::optional<size_t>>(cache->dram->num_bankgroups*cache->dram->num_banks)),
-    lookup_sel(ways, SEL_INIT),
+    evict_lookup_sel(ways, SEL_INIT),
+    eager_lookup_sel(ways, SEL_INIT),
     test_eviction_pos(static_cast<std::size_t>(sets*ways), -1),
-    test_eviction_pos_used(static_cast<std::size_t>(sets*ways), false),
+    test_eager_pos(static_cast<std::size_t>(sets*ways), -1),
     set_modulus(sets / NUM_SAMPLED_SETS),
     ilog2_set_modulus(ilog2(set_modulus))
 {}
@@ -36,165 +37,168 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
     auto begin = std::next(std::begin(last_used_cycles), set * NUM_WAYS);
     auto end = std::next(begin, NUM_WAYS);
 
-    // Compute max lookup:
-    const size_t max_lookup = compute_max_lookup();
+    const size_t max_evict_lookup = compute_max_lookup(evict_lookup_sel.begin(), evict_lookup_sel.end());
+    const size_t max_eager_lookup = compute_max_lookup(eager_lookup_sel.begin(), eager_lookup_sel.end());
 
+    // Compute max lookup:
     if (s_total_evicts % 100'000 == 0)
     {
-        std::cout << "max lookup for evict " << s_total_evicts << " = " << max_lookup << "\n";
-        std::cout << "lookup_sel:";
-        for (auto x : lookup_sel)
-            std::cout << " " << x;
-        std::cout << "\n";
+        std::cout << "max lookup for evict " << s_total_evicts << "\tevict = " << max_evict_lookup << ", eager = " << max_eager_lookup << "\n";
     }
 
-    auto victim = end;
-    bool victim_has_writeback_priority = false;
-    bool victim_was_dirty = false;
+    victim_data victim;
+    victim.iter = end;
 
-    size_t victim_way;
-    size_t victim_channel;
-    size_t victim_bankgroup;
-    size_t victim_bank_idx;
-    size_t victim_row_id;
-    size_t victim_lru_pos;
+    victim_data clean_victim;
+    victim_data dirty_victim;
+    victim_data eager_victim;
+
+    clean_victim.iter = end;
+    dirty_victim.iter = end;
+    eager_victim.iter = end;
     
     if (is_sampled_set(set))
     {
         // Random selection:
         size_t rand_idx = static_cast<size_t>(std::rand()) % NUM_WAYS;
-        victim = std::next(begin, rand_idx);
-
-        victim_was_dirty = current_set[rand_idx].dirty;
-        victim_way = rand_idx;
-
-        auto address = current_set[rand_idx].address;
-        victim_channel = address_mapper.channel(address);
-        victim_bankgroup = address_mapper.bankgroup(address);
-        victim_bank_idx = address_mapper.bank_idx(address);
-        victim_row_id = address_mapper.row(address);
-
-        victim_lru_pos = std::count_if(begin, end,
-                                [t=*victim] (auto x) { return t > x; });
+        
+        victim.iter = std::next(begin, rand_idx);
+        victim.lru_pos = std::count_if(begin, end,
+                                [t=*victim.iter] (auto x) { return t > x; });
+        set_victim_data(victim, rand_idx, current_set);
     }
     else
     {
+        const size_t max_evict_lookup = compute_max_lookup(evict_lookup_sel.begin(), evict_lookup_sel.end());
+        const size_t max_eager_lookup = compute_max_lookup(eager_lookup_sel.begin(), eager_lookup_sel.end());
+
         size_t ii = 0;
         for (auto it = begin; it != end; it++)
         {
             size_t lru_pos = std::count_if(begin, end,
                                     [t=*it] (auto x) { return t > x; });
-            if (lru_pos < max_lookup)
+            victim_data cand;
+            cand.iter = it;
+            cand.lru_pos = lru_pos;
+            set_victim_data(cand, ii, current_set);
+
+            cand.priority = (bankgroup_write_counters[cand.channel][cand.bankgroup] < address_mapper.banks)
+                                    && (!bank_open_row_ids[cand.channel][cand.bank_idx].has_value() || bank_open_row_ids[cand.channel][cand.bank_idx].value() == cand.row);
+
+
+            if (lru_pos < max_evict_lookup)
             {
-                auto address = current_set[ii].address;
-                size_t channel = address_mapper.channel(address),
-                       bg = address_mapper.bankgroup(address),
-                       b_idx = address_mapper.bank_idx(address),
-                       row_id = address_mapper.row(address);
-
-                bool dirty = current_set[ii].dirty;
-                bool prio = (bankgroup_write_counters[channel][bg] < address_mapper.banks)
-                            && (!bank_open_row_ids[channel][b_idx].has_value() || bank_open_row_ids[channel][b_idx].value() == row_id);
-
-                bool evict;            
-                if (victim == end)
+                if (cand.dirty)
                 {
-                    evict = true;
+                    if (dirty_victim.iter == end)
+                    {
+                        dirty_victim = cand;
+                    }
+                    else
+                    {
+                        bool lru_cmp = *it < *dirty_victim.iter;
+                        bool evict = ((dirty_victim.priority == cand.priority) && lru_cmp) || ((dirty_victim.priority != cand.priority) && cand.priority);
+                        if (evict)
+                            dirty_victim = cand;
+                    }
                 }
                 else
                 {
-                    bool lru_cmp = *it < *victim;
-                    
-                    if (dirty && victim_was_dirty)
-                        evict = ((prio == victim_has_writeback_priority) && lru_cmp) || ((prio != victim_has_writeback_priority) && prio);
-                    else if (dirty)
-                        evict = prio || (lru_cmp && !victim_has_writeback_priority);
-                    else if (victim_was_dirty)
-                        evict = !victim_has_writeback_priority && (lru_cmp && !prio);
-                    else
-                        evict = lru_cmp;
-                }
-
-                if (evict)
-                {
-                    victim = it;
-                    victim_has_writeback_priority = prio;
-                    victim_was_dirty = dirty;
-
-                    victim_way = ii;
-                    victim_channel = channel;
-                    victim_bankgroup = bg;
-                    victim_bank_idx = b_idx;
-                    victim_row_id = row_id;
-                    victim_lru_pos = lru_pos;
+                    if (clean_victim.iter == end || (*it < *clean_victim.iter))
+                        clean_victim = cand;
                 }
             }
+
+            if (lru_pos < max_eager_lookup && cand.dirty && cand.priority)
+            {
+                if (eager_victim.iter == end || *it < *eager_victim.iter)
+                    eager_victim = cand;
+            }
+
             ++ii;
         }
+
+        // Determine final victim at the end:
+        if (dirty_victim.iter != end && (clean_victim.iter == end || dirty_victim.priority || *dirty_victim.iter < *clean_victim.iter))
+            victim = dirty_victim;
+        else
+            victim = clean_victim;
     }
 
     // If this is a sampled set, record the victim's lru position and select the true LRU victim.
     if (is_sampled_set(set))
     {
-        size_t pos_idx = set*NUM_WAYS + victim_way;
-        // If the evition pos of the simulated victim is already set, consume it:
-        if (test_eviction_pos[pos_idx] >= 0 && !test_eviction_pos_used[pos_idx])
-        {
-            auto p = test_eviction_pos[pos_idx];
-            if (lookup_sel[p] < SEL_MAX)
-                ++lookup_sel[p];
-        }
-        test_eviction_pos[pos_idx] = victim_lru_pos;
+        auto pos_idx = set*NUM_WAYS + victim.way_id;
+
+        test_eviction_pos[pos_idx] = victim.lru_pos;
+        if (victim.dirty)
+            test_eager_pos[pos_idx] = victim.lru_pos;
 
         // Get LRU victim:
-        victim = std::min_element(begin, end);
-
-        victim_way = std::distance(begin, victim);
-        victim_was_dirty = current_set[victim_way].dirty;
-
-        auto address = current_set[victim_way].address;
-        victim_channel = address_mapper.channel(address);
-        victim_bankgroup = address_mapper.bankgroup(address);
-        victim_bank_idx = address_mapper.bank_idx(address);
-        victim_row_id = address_mapper.row(address);
+        victim.iter = std::min_element(begin, end);
+        set_victim_data(victim, std::distance(begin, victim.iter), current_set);
 
         // Check if `test_eviction_pos` is set for the LRU victim:
-        pos_idx = set*NUM_WAYS + victim_way;
-        if (test_eviction_pos[set*NUM_WAYS + victim_way] >= 0 && !test_eviction_pos_used[set*NUM_WAYS + victim_way])
+        pos_idx = set*NUM_WAYS + victim.way_id;
+        if (test_eviction_pos[pos_idx] >= 0)
         {
-            size_t p = test_eviction_pos[set*NUM_WAYS + victim_way];
-            if (lookup_sel[p] < SEL_MAX)
-                ++lookup_sel[p];
+            auto p = test_eviction_pos[pos_idx];
+            if (evict_lookup_sel[p] < SEL_MAX)
+                ++evict_lookup_sel[p];
+        }
+    
+        if (test_eager_pos[pos_idx] >= 0)
+        {
+            auto p = test_eager_pos[pos_idx];
+            if (eager_lookup_sel[p] < SEL_MAX)
+                ++eager_lookup_sel[p];
         }
     }
     else
     {
-        if (victim_lru_pos > 0)
+        if (victim.lru_pos > 0)
             ++s_non_lru_evicts;
         ++s_total_evicts;
     }
 
-    if (victim_was_dirty)
+    if (!victim.dirty && !is_sampled_set(set))
     {
-        auto& wbg = bankgroup_write_counters[victim_channel];
-        auto& wba = bank_open_row_ids[victim_channel];
+        if (eager_victim.iter != end)
+        {
+            // Swap data of eager way and LRU victim:
+            auto* _current_set = const_cast<champsim::cache_block*>(current_set);
+            _current_set[victim.way_id] = _current_set[eager_victim.way_id];
+            _current_set[eager_victim.way_id].dirty = false;
 
-        ++wbg[victim_bankgroup];
-        wba[victim_bank_idx] = victim_row_id;
+            auto way_id = victim.way_id;
+            victim = std::move(eager_victim);
+            victim.way_id = way_id;  // Only need to preserve way id which is returned
 
-        bool all_done = std::all_of(wbg.begin(), wbg.end(), [m=address_mapper.banks] (auto x) { return x >= m; });
+            ++s_eager_writebacks;
+        }
+    }
+
+    if (victim.dirty)
+    {
+        auto& bg_ctrs = bankgroup_write_counters[victim.channel];
+        auto& ba_rows = bank_open_row_ids[victim.channel];
+
+        ++bg_ctrs[victim.bankgroup];
+        ba_rows[victim.bank_idx] = victim.row;
+
+        bool all_done = std::all_of(bg_ctrs.begin(), bg_ctrs.end(), [m=address_mapper.banks] (auto x) { return x >= m; });
         if (all_done)
         {
-            std::fill(wbg.begin(), wbg.end(), 0);
-            for (auto& r : wba)
+            std::fill(bg_ctrs.begin(), bg_ctrs.end(), 0);
+            for (auto& r : ba_rows)
                 r.reset();
         }
     }
 
     // Find the way whose last use cycle is most distant
-    assert(begin <= victim);
-    assert(victim < end);
-    return victim_way;
+    assert(begin <= victim.iter);
+    assert(victim.iter < end);
+    return victim.way_id;
 }
 
 void wlru::replacement_cache_fill(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip, champsim::address victim_addr,
@@ -205,7 +209,7 @@ void wlru::replacement_cache_fill(uint32_t triggering_cpu, long set, long way, c
 
     // Reset `test_eviction_pos`
     test_eviction_pos[set*NUM_WAYS + way] = -1;
-    test_eviction_pos_used[set*NUM_WAYS + way] = false;
+    test_eager_pos[set*NUM_WAYS + way] = -1;
 }
 
 void wlru::update_replacement_state(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip,
@@ -220,9 +224,16 @@ void wlru::update_replacement_state(uint32_t triggering_cpu, long set, long way,
             int p = test_eviction_pos[pos_idx];
             if (p >= 0)
             {
-                if (lookup_sel[p] > SEL_MIN)
-                    --lookup_sel[p];
-                test_eviction_pos_used[pos_idx] = true;
+                if (evict_lookup_sel[p] > SEL_MIN)
+                    --evict_lookup_sel[p];
+            }
+
+            p = test_eager_pos[pos_idx];
+            if (p >= 0)
+            {
+                eager_lookup_sel[p] -= (eager_lookup_sel[p] >> 3);
+//              if (eager_lookup_sel[p] > SEL_MIN)
+//                  --eager_lookup_sel[p];
             }
         }
         else
@@ -231,10 +242,7 @@ void wlru::update_replacement_state(uint32_t triggering_cpu, long set, long way,
 
             int p = test_eviction_pos[pos_idx];
             if (p >= 0)
-            {
-                lookup_sel[p] -= (lookup_sel[p] >> 3);
-                test_eviction_pos_used[pos_idx] = true;
-            }
+                evict_lookup_sel[p] -= (evict_lookup_sel[p] >> 2);
         }
     }
 }
@@ -242,13 +250,25 @@ void wlru::update_replacement_state(uint32_t triggering_cpu, long set, long way,
 void
 wlru::replacement_final_stats()
 {
-    fmt::print("WCACHE NON LRU EVICTS: {}\tTOTAL EVICTS: {}\n", s_non_lru_evicts, s_total_evicts);
+    fmt::print("WCACHE NON LRU EVICTS: {}\tTOTAL EVICTS: {}\tEAGER WB: {}\n", s_non_lru_evicts, s_total_evicts, s_eager_writebacks);
+}
+
+void
+wlru::set_victim_data(victim_data& v, size_t idx, const champsim::cache_block* current_set)
+{
+    v.dirty = current_set[idx].dirty;
+    v.way_id = idx;
+
+    auto address = current_set[idx].address;
+    v.channel = address_mapper.channel(address);
+    v.bankgroup = address_mapper.bankgroup(address);
+    v.bank_idx = address_mapper.bank_idx(address);
+    v.row = address_mapper.row(address);
 }
 
 size_t
-wlru::compute_max_lookup() const
+wlru::compute_max_lookup(std::vector<int>::const_iterator begin, std::vector<int>::const_iterator end) const
 {
-    auto it = std::find_if(lookup_sel.begin(), lookup_sel.end(),
-                    [] (auto x) { return x < SEL_THRESHOLD; });
-    return std::distance(lookup_sel.begin(), it);
+    auto it = std::find_if(begin, end, [] (auto x) { return x < SEL_THRESHOLD; });
+    return std::distance(begin, it);
 }
