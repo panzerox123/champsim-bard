@@ -5,6 +5,7 @@
 
 #include "cache.h"
 #include "dram_address.h"
+#include "dram_channel.h"
 #include "modules.h"
 
 struct victim_data
@@ -86,5 +87,7 @@ private:
         return (idx & (set_modulus-1)) == (idx >> ilog2_set_modulus);
     }
 };
+
+extern DRAM_PAGE_POLICY opt_dram_page_policy;
 
 #endif

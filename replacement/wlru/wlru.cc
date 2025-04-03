@@ -82,9 +82,15 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
             cand.lru_pos = lru_pos;
             set_victim_data(cand, ii, current_set);
 
-            cand.priority = (bankgroup_write_counters[cand.channel][cand.bankgroup] < address_mapper.banks)
-                                    && (!bank_open_row_ids[cand.channel][cand.bank_idx].has_value() || bank_open_row_ids[cand.channel][cand.bank_idx].value() == cand.row);
-
+            if (opt_dram_page_policy == DRAM_PAGE_POLICY::CLOSE)
+            {
+                cand.priority = (bankgroup_write_counters[cand.channel][cand.bankgroup] < address_mapper.banks) && !bank_open_row_ids[cand.channel][cand.bank_idx].has_value();
+            }
+            else
+            {
+                cand.priority = (bankgroup_write_counters[cand.channel][cand.bankgroup] < address_mapper.banks)
+                                        && (!bank_open_row_ids[cand.channel][cand.bank_idx].has_value() || bank_open_row_ids[cand.channel][cand.bank_idx].value() == cand.row);
+            }
 
             if (lru_pos < max_evict_lookup)
             {
@@ -153,6 +159,9 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
             if (eager_lookup_sel[p] < SEL_MAX)
                 ++eager_lookup_sel[p];
         }
+
+        test_eviction_pos[pos_idx] = -1;
+        test_eager_pos[pos_idx] = -1;
     }
     else
     {
