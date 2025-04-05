@@ -3,6 +3,13 @@ import os
 
 SUITES = ['spec2017', 'ligra', 'stream', 'google']
 
+workload_list = [
+    'wrf', 'roms', 'cam4', 'lbm', 'omnetpp', 'bwaves', 'fotonik3d',
+    'triangle', 'pagerankdelta', 'radii', 'bc', 'cf', 'mis', 'pagerank', 'bellmanford',
+    'scale', 'copy', 'add', 'triad',
+    'whiskey', 'charlie', 'merced', 'delta'
+]
+
 def get_name(filename: str, suite: str) -> str:
     left, right = 0, filename.find('.champsim')
     if suite == 'spec2017':
@@ -32,6 +39,8 @@ for suite in SUITES:
     traces = [f for f in os.listdir(trace_folder) if f.endswith('.xz') or f.endswith('.gz')]
     for trace in traces:
         name = get_name(trace, suite)
+        if name not in workload_list:
+            continue
         trace_filepath = f'{trace_folder}/{trace}'
 
         trace_part = ' '.join([trace_filepath for _ in range(8)])

@@ -149,6 +149,8 @@ std::vector<std::string> champsim::plain_printer::format(DRAM_CHANNEL::stats_typ
 
   lines.push_back(fmt::format("  READ LATENCY: {:10}", mean(stats.tot_read_latency, stats.reads)));
 
+  lines.push_back(fmt::format("  TIME IN WRITE MODE: {:10}", stats.tot_time_in_write_mode));
+
   return lines;
 }
 
