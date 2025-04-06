@@ -29,6 +29,8 @@ wlru::wlru(CACHE* cache, long sets, long ways)
 void
 wlru::initialize_replacement()
 {
+    if (opt_bard_use_bitvector)
+        fmt::print("BARD: USING BITVECTOR\n");
 }
 
 long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, const champsim::cache_block* current_set, champsim::address ip,
@@ -82,7 +84,11 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
             cand.lru_pos = lru_pos;
             set_victim_data(cand, ii, current_set);
 
-            if (opt_dram_page_policy == DRAM_PAGE_POLICY::CLOSE)
+            if (opt_bard_use_bitvector)
+            {
+                cand.priority = !bank_open_row_ids[cand.channel][cand.bank_idx].has_value();
+            }
+            else if (opt_dram_page_policy == DRAM_PAGE_POLICY::CLOSE || !opt_bard_use_row_buffer_hits)
             {
                 cand.priority = (bankgroup_write_counters[cand.channel][cand.bankgroup] < address_mapper.banks) && !bank_open_row_ids[cand.channel][cand.bank_idx].has_value();
             }
@@ -195,7 +201,12 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
         ++bg_ctrs[victim.bankgroup];
         ba_rows[victim.bank_idx] = victim.row;
 
-        bool all_done = std::all_of(bg_ctrs.begin(), bg_ctrs.end(), [m=address_mapper.banks] (auto x) { return x >= m; });
+        bool all_done;
+        if (opt_bard_use_bitvector)
+            all_done = std::all_of(ba_rows.begin(), ba_rows.end(), [] (auto x) { return x.has_value(); });
+        else
+            all_done = std::all_of(bg_ctrs.begin(), bg_ctrs.end(), [m=address_mapper.banks] (auto x) { return x >= m; });
+
         if (all_done)
         {
             std::fill(bg_ctrs.begin(), bg_ctrs.end(), 0);

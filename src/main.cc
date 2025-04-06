@@ -49,6 +49,9 @@ bool             opt_cache_enable_vwq;
 DRAM_PAGE_POLICY opt_dram_page_policy;
 bool             opt_dram_ideal_wlp;
 
+bool opt_bard_use_row_buffer_hits;
+bool opt_bard_use_bitvector;
+
 #ifndef CHAMPSIM_TEST_BUILD
 using configured_environment = champsim::configured::generated_environment<CHAMPSIM_BUILD>;
 
@@ -116,6 +119,9 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
 
   app.add_option("--dram-page-policy", dram_page_policy, "0 = open, 1 = close, 2 = soft-close");
   app.add_flag("--dram-ideal-wlp", opt_dram_ideal_wlp, "enable to ensure writes go to banks uniformly");
+  
+  app.add_flag("--bard-use-row-buffer-hits", opt_bard_use_row_buffer_hits, "enable so BARD tries to maintain RBHR");
+  app.add_flag("--bard-use-bitvector", opt_bard_use_bitvector, "enable so BARD uses one bit per bank");
 
   CLI11_PARSE(app, argc, argv);
 
@@ -140,10 +146,6 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
    * Additional setup:
    * */
   opt_dram_page_policy = static_cast<DRAM_PAGE_POLICY>(dram_page_policy);
-  std::cout << "dram page policy: is open = " << (opt_dram_page_policy == DRAM_PAGE_POLICY::OPEN)
-      << "\tis close = " << (opt_dram_page_policy == DRAM_PAGE_POLICY::CLOSE)
-      << "\tis soft close = " << (opt_dram_page_policy == DRAM_PAGE_POLICY::SOFT_CLOSE)
-      << "\tcmd arg = " << dram_page_policy << "\n";
 
   std::vector<champsim::tracereader> traces;
   std::transform(
