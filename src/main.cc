@@ -51,6 +51,7 @@ bool             opt_dram_ideal_wlp;
 
 bool opt_bard_use_row_buffer_hits;
 bool opt_bard_use_bitvector;
+bool opt_bard_disable_shadow_writeback;
 
 #ifndef CHAMPSIM_TEST_BUILD
 using configured_environment = champsim::configured::generated_environment<CHAMPSIM_BUILD>;
@@ -122,6 +123,7 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
   
   app.add_flag("--bard-use-row-buffer-hits", opt_bard_use_row_buffer_hits, "enable so BARD tries to maintain RBHR");
   app.add_flag("--bard-use-bitvector", opt_bard_use_bitvector, "enable so BARD uses one bit per bank");
+  app.add_flag("--bard-disable-shadow-writeback", opt_bard_disable_shadow_writeback, "enable to disable BARD's shadow writeback");
 
   CLI11_PARSE(app, argc, argv);
 

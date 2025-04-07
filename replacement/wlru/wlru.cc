@@ -121,7 +121,7 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
                 }
             }
 
-            if (lru_pos < max_eager_lookup && cand.dirty && cand.priority)
+            if (!opt_bard_disable_shadow_writeback && lru_pos < max_eager_lookup && cand.dirty && cand.priority)
             {
                 if (eager_victim.iter == end || *it < *eager_victim.iter)
                     eager_victim = cand;
@@ -143,7 +143,7 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
         auto pos_idx = set*NUM_WAYS + victim.way_id;
 
         test_eviction_pos[pos_idx] = victim.lru_pos;
-        if (victim.dirty)
+        if (victim.dirty && !opt_bard_disable_shadow_writeback)
             test_eager_pos[pos_idx] = victim.lru_pos;
 
         // Get LRU victim:
@@ -252,8 +252,6 @@ void wlru::update_replacement_state(uint32_t triggering_cpu, long set, long way,
             if (p >= 0)
             {
                 eager_lookup_sel[p] -= (eager_lookup_sel[p] >> 3);
-//              if (eager_lookup_sel[p] > SEL_MIN)
-//                  --eager_lookup_sel[p];
             }
         }
         else

@@ -91,5 +91,6 @@ private:
 extern DRAM_PAGE_POLICY opt_dram_page_policy;
 extern bool             opt_bard_use_row_buffer_hits;
 extern bool             opt_bard_use_bitvector;
+extern bool             opt_bard_disable_shadow_writeback;
 
 #endif
