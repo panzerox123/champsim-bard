@@ -18,7 +18,7 @@ def read_stat_from_line(line: str, start_string: str, end_string: str):
 
 def collect_stats(build: str, output_file: str):
     wr = open(output_file, 'w')
-    wr.write('Workload,IPC,MPKI,WPKI,Write-Read-Ratio,Write RBHR,Write BLP\n')
+    wr.write('Workload,IPC,MPKI,WPKI,Write-Read-Ratio,Write RBHR,Write BLP,Write Mode Fraction,Ideal Write Mode Fraction,Ideal Speedup,Write Latency,Total Evictions,PW Evictions,SW Evictions\n')
 
     for suite in SUITES:
         data_folder = f'out/{build}/{suite}'
@@ -48,9 +48,11 @@ def collect_stats(build: str, output_file: str):
                         cpuid = int(read_stat_from_line(line, 'CPU', 'cumulative'))
                         ipc = float(read_stat_from_line(line, 'IPC:', 'instructions'))
                         inst = int(read_stat_from_line(line, 'instructions:', 'cycles'))
+                        cycles = int(read_stat_from_line(line, 'cycles:', None))
 
                         cpu_stats[cpuid]['ipc'] = ipc
                         cpu_stats[cpuid]['inst'] = inst
+                        cpu_stats[cpuid]['cycles'] = cycles
                     line = rd.readline().strip()
 
                 # Get LLC MPKI per core:
@@ -68,6 +70,7 @@ def collect_stats(build: str, output_file: str):
                 dram_read_reqs, dram_write_reqs = 0, 0
                 dram_write_rbhr = []
                 dram_wblp = []
+                dram_write_time = []
                 for i in range(2):
                     while f'Channel {i}' not in line:
                         line = rd.readline()
@@ -94,17 +97,37 @@ def collect_stats(build: str, output_file: str):
                     line = rd.readline()
                     wblp = float(read_stat_from_line(line, 'MEAN WLP:', None))
 
+                    line = rd.readline()# Read latency
+
+                    # Write mode time
+                    line = rd.readline()
+                    write_mode_time = int(read_stat_from_line(line, 'TIME IN WRITE MODE:', None))
+
                     # update dram stats:
                     dram_read_reqs += read_reqs
                     dram_write_reqs += write_reqs
                     dram_write_rbhr.append(0 if write_cmds == 0 else write_hits/write_cmds)
                     dram_wblp.append(wblp)
+                    dram_write_time.append(write_mode_time)
 
                 dram_stats['read_requests'] = dram_read_reqs
                 dram_stats['write_requests'] = dram_write_reqs
                 dram_stats['write_rbhr'] = sum(dram_write_rbhr) / len(dram_write_rbhr)
                 dram_stats['write_blp'] = sum(dram_wblp) / len(dram_wblp)
                 dram_stats['wpki'] = (dram_write_reqs*1000) / sum(cpu_stats[c]['inst'] for c in cpu_stats)
+                dram_stats['write_mode_time'] = sum(dram_write_time) / len(dram_write_time)
+
+                # Either the line is EOF or is at BARD stats:
+                while line != '':
+                    if 'WCACHE' in line:
+                        pw_evicts = int(read_stat_from_line(line, 'NON LRU EVICTS:', 'TOTAL EVICTS'))
+                        total_evicts = int(read_stat_from_line(line, 'TOTAL EVICTS:', 'EAGER WB:'))
+                        sw_evicts = int(read_stat_from_line(line, 'EAGER WB:', None))
+                        break
+                    else:
+                        pw_evicts, total_evicts, sw_evicts = 0, 0, 0
+                    line = rd.readline()
+
             # Write stats to csv file:
             ipc = len(cpu_stats) / sum(1.0/cpu_stats[cpuid]['ipc'] for cpuid in cpu_stats)
             mpki = len(cpu_stats) / sum(1.0/cpu_stats[cpuid]['mpki'] for cpuid in cpu_stats)
@@ -112,7 +135,18 @@ def collect_stats(build: str, output_file: str):
             write_read_ratio = dram_stats['write_requests'] / dram_stats['read_requests']
             write_rbhr = dram_stats['write_rbhr']
             write_blp = dram_stats['write_blp']
-            wr.write(f'{name},{ipc},{mpki},{wpki},{write_read_ratio},{write_rbhr},{write_blp}\n')
+
+            total_execution_time = cpu_stats[0]['cycles'] * 250
+            write_mode_time = dram_stats['write_mode_time']
+            write_latency = 2*write_mode_time / dram_stats['write_requests']
+            ideal_write_mode_time = dram_stats['write_mode_time'] - ((write_latency-3300)*dram_stats['write_requests']*0.5)
+            ideal_execution_time = total_execution_time - (write_mode_time-ideal_write_mode_time)
+
+            write_time_fraction = write_mode_time/total_execution_time
+            ideal_write_time_fraction = ideal_write_mode_time/ideal_execution_time
+            ideal_speedup = total_execution_time / ideal_execution_time
+
+            wr.write(f'{name},{ipc},{mpki},{wpki},{write_read_ratio},{write_rbhr},{write_blp},{write_time_fraction},{ideal_write_time_fraction},{ideal_speedup},{write_latency},{total_evicts},{pw_evicts},{sw_evicts}\n')
         wr.write('\n')
     wr.close() 
 

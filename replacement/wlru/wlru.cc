@@ -131,7 +131,7 @@ long wlru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
         }
 
         // Determine final victim at the end:
-        if (dirty_victim.iter != end && (clean_victim.iter == end || dirty_victim.priority || *dirty_victim.iter < *clean_victim.iter))
+        if (dirty_victim.iter != end && (clean_victim.iter == end || *dirty_victim.iter < *clean_victim.iter))
             victim = dirty_victim;
         else
             victim = clean_victim;
