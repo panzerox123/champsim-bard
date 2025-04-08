@@ -53,6 +53,10 @@ bool opt_bard_use_row_buffer_hits;
 bool opt_bard_use_bitvector;
 bool opt_bard_disable_shadow_writeback;
 
+int opt_bard_max_lookup;
+int opt_bard_sampled_sets;
+
+
 #ifndef CHAMPSIM_TEST_BUILD
 using configured_environment = champsim::configured::generated_environment<CHAMPSIM_BUILD>;
 
@@ -60,17 +64,6 @@ const std::size_t NUM_CPUS = configured_environment::num_cpus;
 
 const unsigned BLOCK_SIZE = configured_environment::block_size;
 const unsigned PAGE_SIZE = configured_environment::page_size;
-/*
- * These functions are for global access to common structures (because champsim does not have it by default, I guess??)
- * */
-/*
-configured_environment gen_environment{};
-
-MEMORY_CONTROLLER& dram_ref()
-{
-    return gen_environment.dram_view();
-};
-*/
 
 #endif
 
@@ -116,6 +109,9 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
    * */
   int dram_page_policy = 0;
 
+  opt_bard_max_lookup = -1;
+  opt_bard_sampled_sets = 64;
+
   app.add_flag("--cache-enable-vwq", opt_cache_enable_vwq, "enable VWQ for caches with a non-null DRAM ptr");
 
   app.add_option("--dram-page-policy", dram_page_policy, "0 = open, 1 = close, 2 = soft-close");
@@ -124,6 +120,8 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
   app.add_flag("--bard-use-row-buffer-hits", opt_bard_use_row_buffer_hits, "enable so BARD tries to maintain RBHR");
   app.add_flag("--bard-use-bitvector", opt_bard_use_bitvector, "enable so BARD uses one bit per bank");
   app.add_flag("--bard-disable-shadow-writeback", opt_bard_disable_shadow_writeback, "enable to disable BARD's shadow writeback");
+  app.add_option("--bard-max-lookup", opt_bard_max_lookup, "max way lookup for bard (default = -1, which enables use mark-recapture)");
+  app.add_option("--bard-sampled-sets", opt_bard_sampled_sets, "sampled sets for bard (default = 64)");
 
   CLI11_PARSE(app, argc, argv);
 

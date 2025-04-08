@@ -27,7 +27,7 @@ output_folder_name = argv[1]
 build = argv[2]
 cmd_options = argv[3]
 
-INST_SIM = 50_000_000
+INST_SIM = 100_000_000
 INST_WARMUP = 25_000_000
 
 for suite in SUITES:
@@ -35,7 +35,8 @@ for suite in SUITES:
     if not os.path.isdir(output_folder):
         os.system(f'mkdir -p {output_folder}')
 
-    trace_folder = f'../frost/TRACES/ctf/{suite}'
+#   trace_folder = f'../frost/TRACES/ctf/{suite}'
+    trace_folder = f'TRACES/ctf/{suite}'
     traces = [f for f in os.listdir(trace_folder) if f.endswith('.xz') or f.endswith('.gz')]
     for trace in traces:
         name = get_name(trace, suite)
