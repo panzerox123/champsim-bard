@@ -13,7 +13,7 @@ bard_ship::bard_ship(CACHE* cache)
     NUM_WAY(cache->NUM_WAY),
     sampler(SAMPLER_SET_FACTOR * NUM_CPUS * static_cast<std::size_t>(NUM_WAY)),
     rrpv_values(static_cast<std::size_t>(NUM_SET * NUM_WAY), RRPV_MAX),
-    bard_impl(4, cache->NUM_SET, cache->NUM_WAY, cache->dram, false)
+    bard_impl(4, cache->NUM_SET, cache->NUM_WAY, cache, false)
 {
     // randomly selected sampler sets
     std::generate_n(std::back_inserter(rand_sets), SAMPLER_SET_FACTOR * NUM_CPUS, std::knuth_b{1});
@@ -87,7 +87,7 @@ long bard_ship::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
             });
 
     if (current_set[victim_way].dirty)
-        bard_impl.handle_writeback(current_set[victim_way].address);
+        bard_impl.handle_writeback(set, current_set[victim_way].address);
 
     ++bard_impl.s_total_evicts;
 

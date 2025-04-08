@@ -7,7 +7,7 @@ bard_lru::bard_lru(CACHE* cache) : bard_lru(cache, cache->NUM_SET, cache->NUM_WA
 
 bard_lru::bard_lru(CACHE* cache, long sets, long ways)
     :replacement(cache), 
-    bard_impl(ways, sets, ways, cache->dram, true),
+    bard_impl(ways, sets, ways, cache, true),
     NUM_WAY(ways),
     last_used_cycles(static_cast<std::size_t>(sets * ways), 0)
 {}
@@ -68,10 +68,10 @@ long bard_lru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set,
             if (shadow_way >= 0)
                 cache_set_copy_way_contents_and_clean_source(current_set, shadow_way, victim_way);
         }
-
-        if (current_set[victim_way].dirty)
-            bard_impl.handle_writeback(current_set[victim_way].address);
     }
+
+    if (current_set[victim_way].dirty)
+        bard_impl.handle_writeback(set, current_set[victim_way].address);
 
     return victim_way;
 }
@@ -86,18 +86,31 @@ void bard_lru::replacement_cache_fill(uint32_t triggering_cpu, long set, long wa
 void bard_lru::update_replacement_state(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip,
                                    champsim::address victim_addr, access_type type, uint8_t hit)
 {
-    // Mark the way as being used on the current cycle
-    if (hit && access_type{type} != access_type::WRITE) // Skip this for writeback hits
-        last_used_cycles.at((std::size_t)(set * NUM_WAY + way)) = cycle++;
-
     // Update bard:
+    int pos = -1;
     if (hit)
     {
         if (access_type{type} == access_type::WRITE)
             bard_impl.handle_recapture(set, way, BARD::RecaptureType::WRITE_HIT);
         else
             bard_impl.handle_recapture(set, way, BARD::RecaptureType::LOAD_HIT);
+
+        // Compute LRU position
+        auto begin = std::next(last_used_cycles.begin(), set*NUM_WAY);
+        auto end = std::next(begin, NUM_WAY);
+        pos = std::count_if(begin, end, 
+                        [timestamp=last_used_cycles[set*NUM_WAY+way]] 
+                        (auto t)
+                        { 
+                            return timestamp > t;
+                        });
     }
+
+    bard_impl.handle_hit_miss(set, way, pos, (access_type{type} == access_type::WRITE), !hit);
+
+    // Mark the way as being used on the current cycle
+    if (hit && access_type{type} != access_type::WRITE) // Skip this for writeback hits
+        last_used_cycles.at((std::size_t)(set * NUM_WAY + way)) = cycle++;
 }
 
 void

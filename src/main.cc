@@ -51,11 +51,14 @@ bool             opt_dram_ideal_wlp;
 
 bool opt_bard_use_row_buffer_hits;
 bool opt_bard_use_bitvector;
-bool opt_bard_disable_shadow_writeback;
+
+bool opt_bard_only_proactive_writeback;
+bool opt_bard_only_shadow_writeback;
 
 int opt_bard_max_lookup;
 int opt_bard_sampled_sets;
 
+bool opt_bard_use_utility_counters;
 
 #ifndef CHAMPSIM_TEST_BUILD
 using configured_environment = champsim::configured::generated_environment<CHAMPSIM_BUILD>;
@@ -103,25 +106,31 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
       app.add_option("--json", json_file_name, "The name of the file to receive JSON output. If no name is specified, stdout will be used")->expected(0, 1);
 
   app.add_option("traces", trace_names, "The paths to the traces")->required()->expected(NUM_CPUS)->check(CLI::ExistingFile);
-
   /*
    * Additional params and flags::
    * */
   int dram_page_policy = 0;
 
-  opt_bard_max_lookup = -1;
-  opt_bard_sampled_sets = 64;
-
   app.add_flag("--cache-enable-vwq", opt_cache_enable_vwq, "enable VWQ for caches with a non-null DRAM ptr");
 
   app.add_option("--dram-page-policy", dram_page_policy, "0 = open, 1 = close, 2 = soft-close");
   app.add_flag("--dram-ideal-wlp", opt_dram_ideal_wlp, "enable to ensure writes go to banks uniformly");
-  
+  /*
+   * BARD OPTIONS;
+   * */
+  opt_bard_max_lookup = -1;
+  opt_bard_sampled_sets = 64;
+
   app.add_flag("--bard-use-row-buffer-hits", opt_bard_use_row_buffer_hits, "enable so BARD tries to maintain RBHR");
   app.add_flag("--bard-use-bitvector", opt_bard_use_bitvector, "enable so BARD uses one bit per bank");
-  app.add_flag("--bard-disable-shadow-writeback", opt_bard_disable_shadow_writeback, "enable to disable BARD's shadow writeback");
+
+  app.add_flag("--bard-only-proactive-writeback", opt_bard_only_proactive_writeback, "enable to disable BARD's shadow writeback");
+  app.add_flag("--bard-only-shadow-writeback", opt_bard_only_shadow_writeback, "enable to disable BARD's shadow writeback");
+
   app.add_option("--bard-max-lookup", opt_bard_max_lookup, "max way lookup for bard (default = -1, which enables use mark-recapture)");
   app.add_option("--bard-sampled-sets", opt_bard_sampled_sets, "sampled sets for bard (default = 64)");
+
+  app.add_flag("--bard-use-utility-counters", opt_bard_use_utility_counters, "set to use utility counters instead of mark recapture");
 
   CLI11_PARSE(app, argc, argv);
 

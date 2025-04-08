@@ -10,7 +10,7 @@ bard_srrip::bard_srrip(CACHE* cache) : bard_srrip(cache, cache->NUM_SET, cache->
 
 bard_srrip::bard_srrip(CACHE* cache, long sets_, long ways_)
     :replacement(cache),
-    bard_impl(4, sets_, ways_, cache->dram, false),
+    bard_impl(4, sets_, ways_, cache, false),
     NUM_SET(sets_),
     NUM_WAY(ways_),
     rrpv(sets_*ways_, RRPV_MAX)
@@ -80,7 +80,7 @@ bard_srrip::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, co
             });
 
     if (current_set[victim_way].dirty)
-        bard_impl.handle_writeback(current_set[victim_way].address);
+        bard_impl.handle_writeback(set, current_set[victim_way].address);
 
     ++bard_impl.s_total_evicts;
 

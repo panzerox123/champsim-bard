@@ -52,11 +52,29 @@ private:
         mark_recapture_data_type(size_t num_positions, long sets, long ways);
     };
 
+    struct utility_monitor
+    {
+        std::vector<int> hits;
+        int misses =0;
+
+        int max_lookup = 0;
+
+        utility_monitor(size_t num_positions);
+
+        void update_max_lookup(bool pos_sort_descending);
+        void divide_counters(void);
+    };
+
     std::vector<std::vector<size_t>> bankgroup_write_counters;
     std::vector<std::vector<bool>> bank_write_bitvec;
     mark_recapture_data_type mr_evict;
     mark_recapture_data_type mr_eager;
 
+    utility_monitor load_umon;
+    utility_monitor write_umon;
+    uint64_t last_update_cycle =0;
+
+    CACHE* cache;
     DRAM_ADDRESS_MAPPER address_mapper;
 
     const long NUM_SET;
@@ -72,29 +90,33 @@ private:
 public:
     using pos_iterator = std::vector<position_type>::const_iterator;
 
-    BARD(size_t num_positions, long sets, long ways, MEMORY_CONTROLLER*, bool pos_order);
+    BARD(size_t num_positions, long sets, long ways, CACHE*, bool pos_order);
 
     void print_update_msg(void);
 
     void initialize(void);
     void print_stats(void);
 
-    void handle_mark(long set, long rand_way, position_type pos, bool dirty);
+    void handle_mark(long set, long rand_way, position_type, bool dirty);
     void handle_recapture(long set, long way, RecaptureType);
-    void handle_writeback(champsim::address);
+    void handle_writeback(long set, champsim::address);
+
+    void handle_hit_miss(long set, long way, position_type, bool is_write, bool is_miss);
 
     long find_victim(long initial_victim_way, long set, pos_iterator pos_begin, pos_iterator pos_end, const champsim::cache_block*);
     long find_eager_writeback(long set, pos_iterator pos_begin, pos_iterator pos_end, const champsim::cache_block*);
 
     bool is_sampled_set(long set) const;
 
-    int get_max_eviction_pos(void) const;
-    int get_max_eager_pos(void) const;
+    int get_max_eviction_pos(void);
+    int get_max_eager_pos(void);
 private:
     void set_victim_data(bard_victim_data&, long way, const champsim::cache_block* current_set);
 
     bard_victim_data select_dirty_line(pos_iterator pos_begin, pos_iterator pos_end, const long max_lookup, const champsim::cache_block*);
     int compute_max_lookup(const std::vector<int>&) const;
+
+    void update_utility_monitors(void);
 };
 
 void cache_set_copy_way_contents_and_clean_source(const champsim::cache_block*, long from, long to);
@@ -105,10 +127,14 @@ void cache_set_copy_way_contents_and_clean_source(const champsim::cache_block*, 
 extern DRAM_PAGE_POLICY opt_dram_page_policy;
 extern bool             opt_bard_use_row_buffer_hits;
 extern bool             opt_bard_use_bitvector;
-extern bool             opt_bard_disable_shadow_writeback;
+
+extern bool             opt_bard_only_proactive_writeback;
+extern bool             opt_bard_only_shadow_writeback;
 
 extern int              opt_bard_max_lookup;
 extern int              opt_bard_sampled_sets;
+
+extern bool             opt_bard_use_utility_counters;
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////

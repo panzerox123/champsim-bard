@@ -10,12 +10,57 @@ BARD::mark_recapture_data_type::mark_recapture_data_type(size_t num_pos, long se
     test_pos(static_cast<size_t>(sets*ways), -1)
 {}
 
-BARD::BARD(size_t num_positions, long sets, long ways, MEMORY_CONTROLLER* dram, bool pos_order)
-    :bankgroup_write_counters(dram->num_channels, std::vector<size_t>(dram->num_bankgroups, 0)),
-    bank_write_bitvec(dram->num_channels, std::vector<bool>(dram->num_bankgroups*dram->num_banks, false)),
+BARD::utility_monitor::utility_monitor(size_t num_pos)
+    :hits(num_pos, 0)
+{}
+
+void
+BARD::utility_monitor::update_max_lookup(bool pos_sort_descending)
+{
+    int miss_count = misses;
+    max_lookup = pos_sort_descending ? hits.size() : 0;
+
+    const int i_start = pos_sort_descending ? 0 : hits.size() - 1;
+    const int i_end = pos_sort_descending ? hits.size() : -1;
+
+    int i = i_start;
+    while (i != i_end)
+    {
+        int new_miss_count = miss_count + hits[i];
+        if (new_miss_count <= misses + (misses>>4))
+        {
+            miss_count = new_miss_count;
+        }
+        else
+        {
+            max_lookup = i;
+            break;
+        }
+
+        if (pos_sort_descending)
+            ++i;
+        else
+            --i;
+    }
+}
+
+void
+BARD::utility_monitor::divide_counters()
+{
+    for (auto& c : hits)
+        c >>= 1;
+    misses >>= 1;
+}
+
+BARD::BARD(size_t num_positions, long sets, long ways, CACHE* cache, bool pos_order)
+    :bankgroup_write_counters(cache->dram->num_channels, std::vector<size_t>(cache->dram->num_bankgroups, 0)),
+    bank_write_bitvec(cache->dram->num_channels, std::vector<bool>(cache->dram->num_bankgroups*cache->dram->num_banks, false)),
     mr_evict(num_positions, sets, ways),
     mr_eager(num_positions, sets, ways),
-    address_mapper(dram->address_mapper),
+    load_umon(num_positions),
+    write_umon(num_positions),
+    cache(cache),
+    address_mapper(cache->dram->address_mapper),
     NUM_SET(sets),
     NUM_WAY(ways),
     pos_sort_descending(pos_order)
@@ -28,24 +73,40 @@ BARD::print_update_msg()
     {
         fmt::print("num evicts: {}, p: {}, s: {} \t max proactive lookup: {}, max shadow lookup: {}\n", s_total_evicts, s_non_lru_evicts, s_eager_writebacks, get_max_eviction_pos(), get_max_eager_pos());
 
-        fmt::print("\tevict counters:");
-        for (int x : mr_evict.sel)
-            fmt::print(" {}", x);
+        if (opt_bard_use_utility_counters)
+        {
+            fmt::print("current cycle = {}, last update cycle = {}, delta = {}\n",
+                    cache->current_cycle(), last_update_cycle, cache->current_cycle() - last_update_cycle);
 
-        fmt::print("\n\teager counters:");
-        for (int x : mr_eager.sel)
-            fmt::print(" {}", x);
+            fmt::print("\tload umon |\tmisses = {}, hits=", load_umon.misses);
+            for (auto& c : load_umon.hits)
+                fmt::print(" {}", c);
+            fmt::print("\n\twrite umon |\tmisses = {}, hits=", write_umon.misses);
+            for (auto& c : write_umon.hits)
+                fmt::print(" {}", c);
+            fmt::print("\n");
+        }
+        else
+        {
+            fmt::print("\tevict counters:");
+            for (int x : mr_evict.sel)
+                fmt::print(" {}", x);
 
-        fmt::print("\n");
+            fmt::print("\n\teager counters:");
+            for (int x : mr_eager.sel)
+                fmt::print(" {}", x);
+
+            fmt::print("\n");
+        }
     }
 }
 
 void
 BARD::initialize()
 {
-    fmt::print("initializing BARD...\n");
     set_modulus = NUM_SET / opt_bard_sampled_sets;
     ilog2_set_modulus = ilog2(set_modulus);
+    fmt::print("initializing BARD -- num sampled sets: {}, modulus = {}\n", opt_bard_sampled_sets, set_modulus);
 }
 
 void
@@ -110,8 +171,13 @@ BARD::handle_recapture(long set, long way, RecaptureType r)
 }
 
 void
-BARD::handle_writeback(champsim::address address)
+BARD::handle_writeback(long set, champsim::address address)
 {
+    if (is_sampled_set(set))
+    {
+        ++write_umon.misses;
+    }
+
     auto channel = address_mapper.channel(address);
     auto bankgroup = address_mapper.bankgroup(address);
     auto bank_idx = address_mapper.bank_idx(address);
@@ -135,11 +201,33 @@ BARD::handle_writeback(champsim::address address)
     }
 }
 
+void
+BARD::handle_hit_miss(long set, long way, position_type pos, bool is_write, bool is_miss)
+{
+    if (!is_sampled_set(set))
+        return;
+
+    if (is_write)
+    {
+        if (!is_miss && cache->block[set*NUM_WAY + way].dirty)
+            ++write_umon.hits[pos];
+    }
+    else
+    {
+        if (is_miss)
+            ++load_umon.misses;
+        else
+            ++load_umon.hits[pos];
+    }
+}
+
 long
 BARD::find_victim(long initial_victim_way, long set, pos_iterator pos_begin, pos_iterator pos_end, const champsim::cache_block* current_set)
 {
-    if (is_sampled_set(set)) 
+    if (is_sampled_set(set) || opt_bard_only_shadow_writeback) 
         return initial_victim_way;
+
+    update_utility_monitors();
 
     const long max_lookup = get_max_eviction_pos();
 
@@ -186,8 +274,10 @@ BARD::find_victim(long initial_victim_way, long set, pos_iterator pos_begin, pos
 long
 BARD::find_eager_writeback(long set, pos_iterator pos_begin, pos_iterator pos_end, const champsim::cache_block* current_set)
 {
-    if (is_sampled_set(set) || opt_bard_disable_shadow_writeback)
+    if (is_sampled_set(set) || opt_bard_only_proactive_writeback)
         return -1;
+
+    update_utility_monitors();
 
     const long max_lookup = get_max_eager_pos();
     bard_victim_data victim = select_dirty_line(pos_begin, pos_end, max_lookup, current_set);
@@ -211,15 +301,39 @@ BARD::is_sampled_set(long _set) const
 }
 
 int
-BARD::get_max_eviction_pos() const
+BARD::get_max_eviction_pos()
 {
-    return compute_max_lookup(mr_evict.sel);
+    if (opt_bard_max_lookup >= 0)
+    {
+        return opt_bard_max_lookup;
+    }
+    else if (opt_bard_use_utility_counters)
+    {
+        load_umon.update_max_lookup(pos_sort_descending);
+        return load_umon.max_lookup;
+    }
+    else
+    {
+        return compute_max_lookup(mr_evict.sel);
+    }
 }
 
 int
-BARD::get_max_eager_pos() const
+BARD::get_max_eager_pos()
 {
-    return compute_max_lookup(mr_eager.sel);
+    if (opt_bard_max_lookup >= 0)
+    {
+        return opt_bard_max_lookup;
+    }
+    else if (opt_bard_use_utility_counters)
+    {
+        write_umon.update_max_lookup(pos_sort_descending);
+        return write_umon.max_lookup;
+    }
+    else
+    {
+        return compute_max_lookup(mr_eager.sel);
+    }
 }
 
 void
@@ -270,22 +384,26 @@ BARD::select_dirty_line(pos_iterator pos_begin, pos_iterator pos_end, const long
 int
 BARD::compute_max_lookup(const std::vector<int>& sel) const
 {
-    if (opt_bard_max_lookup >= 0)
+    if (pos_sort_descending)
     {
-        return opt_bard_max_lookup;
+        auto it = std::find_if(sel.begin(), sel.end(), [] (auto x) { return x < SEL_THRESHOLD; });
+        return std::max(static_cast<int>(std::distance(sel.begin(), it)), 1);
     }
     else
     {
-        if (pos_sort_descending)
-        {
-            auto it = std::find_if(sel.begin(), sel.end(), [] (auto x) { return x < SEL_THRESHOLD; });
-            return std::min(static_cast<int>(std::distance(sel.begin(), it)), 1);
-        }
-        else
-        {
-            auto it = std::find_if(sel.rbegin(), sel.rend(), [] (auto x) { return x < SEL_THRESHOLD; });
-            return std::min(static_cast<int>(sel.size() - std::distance(sel.rbegin(), it)), static_cast<int>(sel.size())-1);
-        }
+        auto it = std::find_if(sel.rbegin(), sel.rend(), [] (auto x) { return x < SEL_THRESHOLD; });
+        return std::min(static_cast<int>(sel.size() - std::distance(sel.rbegin(), it)), static_cast<int>(sel.size())-1);
+    }
+}
+
+void
+BARD::update_utility_monitors()
+{
+    if (cache->current_cycle() - last_update_cycle >= 5'000'000)
+    {
+        load_umon.divide_counters();
+        write_umon.divide_counters();
+        last_update_cycle = cache->current_cycle();
     }
 }
 
