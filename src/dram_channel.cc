@@ -39,7 +39,8 @@ DRAM_CHANNEL::DRAM_CHANNEL(
     channel_id(_channel_id),
     address_mapper(am),
     dram_timing(timing),
-    writes_per_bank(_num_bankgroups*_num_banks, 0)
+    writes_per_bank(_num_bankgroups*_num_banks, 0),
+    writes_per_bankgroup(_num_bankgroups, 0)
 {
 #if defined(DRAM_ENABLE_LOGGER)
     logger = std::ofstream("dram_channel." + std::to_string(channel_id) + ".log");
@@ -187,6 +188,8 @@ DRAM_CHANNEL::schedule_ready_request()
             ++sim_stats.writes;
             sim_stats.write_row_hits += b.state.next_cas_is_row_hit;
             ++writes_during_drain;
+
+            ++writes_per_bankgroup[bg];
             ++writes_per_bank[b_idx];
         }
 
@@ -482,7 +485,10 @@ DRAM_CHANNEL::update_read_write_priority()
             sim_stats.tot_read_occu_post_drain += read_occu;
             
             size_t banks_with_writes = std::count_if(writes_per_bank.begin(), writes_per_bank.end(), [] (auto x) { return x != 0; });
-            sim_stats.tot_wlp += banks_with_writes;
+            sim_stats.tot_bank_parallelism += banks_with_writes;
+
+            size_t bankgroups_with_writes = std::count_if(writes_per_bankgroup.begin(), writes_per_bankgroup.end(), [] (auto x) { return x != 0; });
+            sim_stats.tot_bankgroup_parallelism += bankgroups_with_writes;
         }
     }
     else if (!write_mode && ((read_occu == 0 && write_occu > 0) || write_occu >= high_watermark))
@@ -496,6 +502,7 @@ DRAM_CHANNEL::update_read_write_priority()
         sim_stats.tot_read_occu_pre_drain += read_occu;
 
         std::fill(writes_per_bank.begin(), writes_per_bank.end(), 0);
+        std::fill(writes_per_bankgroup.begin(), writes_per_bankgroup.end(), 0);
     }
 }
 
