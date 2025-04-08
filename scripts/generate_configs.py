@@ -194,10 +194,15 @@ write_config_file('baseline_close_srrip', 'srrip', 48)
 write_config_file('baseline_close_ship', 'ship', 48)
 
 # BARD:
-write_config_file('bard_close', 'wlru', 48)
+write_config_file('bard_close', 'bard_lru', 48)
+write_config_file('bard_close_srrip', 'bard_srrip', 48)
+write_config_file('bard_close_ship', 'bard_ship', 48)
+
+# VWQ:
+write_config_file('vwq_clopen', 'vwq_lru', 48)
 
 # Sensitivity:
 for dram_write_buffer_size in [32, 64, 96]:
     write_config_file(f'baseline_close_wb{dram_write_buffer_size}', 'lru', dram_write_buffer_size)
-    write_config_file(f'bard_close_wb{dram_write_buffer_size}', 'wlru', dram_write_buffer_size)
+    write_config_file(f'bard_close_wb{dram_write_buffer_size}', 'bard_lru', dram_write_buffer_size)
 

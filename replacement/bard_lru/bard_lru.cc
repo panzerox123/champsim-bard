@@ -21,12 +21,14 @@ bard_lru::initialize_replacement()
 long bard_lru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, const champsim::cache_block* current_set, champsim::address ip,
                       champsim::address full_addr, access_type type)
 {
+    bard_impl.print_update_msg();
+
     auto begin = std::next(std::begin(last_used_cycles), set * NUM_WAY);
     auto end = std::next(begin, NUM_WAY);
 
     if (bard_impl.is_sampled_set(set))
     {
-        long rand_way = std::rand();
+        long rand_way = std::rand() % NUM_WAY;
         auto rand_it = std::next(begin, rand_way);
         int lru_pos = std::count_if(begin, end, [timestamp=*rand_it] (auto t) { return timestamp > t; });
 

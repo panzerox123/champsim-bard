@@ -28,6 +28,8 @@ int& bard_ship::get_rrpv(long set, long way) { return rrpv_values.at(static_cast
 long bard_ship::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, const champsim::cache_block* current_set, champsim::address ip,
                        champsim::address full_addr, access_type type)
 {
+    bard_impl.print_update_msg();
+
     const int max_lookup = bard_impl.get_max_eviction_pos();
 
     auto begin = std::next(rrpv_values.begin(), set*NUM_WAY);
@@ -35,7 +37,7 @@ long bard_ship::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
 
     if (bard_impl.is_sampled_set(set))
     {
-        long rand_way = std::rand();
+        long rand_way = std::rand() % NUM_WAY;
         auto rand_it = std::next(begin, rand_way);
         int r = *rand_it;
 
@@ -87,6 +89,8 @@ long bard_ship::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
     if (current_set[victim_way].dirty)
         bard_impl.handle_writeback(current_set[victim_way].address);
 
+    ++bard_impl.s_total_evicts;
+
     return victim_way;
 }
 
@@ -96,15 +100,30 @@ void bard_ship::update_replacement_state(uint32_t triggering_cpu, long set, long
 {
     using namespace champsim::data::data_literals;
 
-    int initial_rrpv = hit ? 0 : bard_impl.get_max_eviction_pos()-1;
-    if (initial_rrpv < RRPV_MIN)  // Can occur when max lookup = 0
-        initial_rrpv = RRPV_MIN;
+    if (way == NUM_WAY)
+        return;
+
+    int initial_rrpv = bard_impl.is_sampled_set(set) ? next_rand_rrpv : bard_impl.get_max_eviction_pos()-1;
+    initial_rrpv = std::clamp(initial_rrpv, RRPV_MIN, RRPV_MAX-1);
 
     // handle writeback access
     if (access_type{type} == access_type::WRITE)
     {
         if (!hit)
+        {
             get_rrpv(set, way) = initial_rrpv;
+
+            if (bard_impl.is_sampled_set(set))
+            {
+                ++next_rand_rrpv;
+                if (next_rand_rrpv > RRPV_MAX)
+                    next_rand_rrpv = RRPV_MIN;
+            }
+        }
+        else
+        {
+            bard_impl.handle_recapture(set, way, BARD::RecaptureType::WRITE_HIT);
+        }
 
         return;
     }
@@ -145,14 +164,26 @@ void bard_ship::update_replacement_state(uint32_t triggering_cpu, long set, long
     if (hit)
     {
         get_rrpv(set, way) = 0;
+        bard_impl.handle_recapture(set, way, BARD::RecaptureType::LOAD_HIT);
     }
     else
     {
         // SHIP prediction
         auto SHCT_idx = ip.slice_lower<32_b>().to<std::size_t>() % SHCT_PRIME;
 
-        get_rrpv(set, way) = initial_rrpv;
         if (SHCT[triggering_cpu][SHCT_idx].is_max())
+        {
             get_rrpv(set, way) = RRPV_MAX;
+        }
+        else
+        {
+            get_rrpv(set, way) = initial_rrpv;
+            if (bard_impl.is_sampled_set(set))
+            {
+                ++next_rand_rrpv;
+                if (next_rand_rrpv > RRPV_MAX)
+                    next_rand_rrpv = RRPV_MIN;
+            }
+        }
     }
 }

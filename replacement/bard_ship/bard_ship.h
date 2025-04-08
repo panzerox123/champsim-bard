@@ -43,6 +43,7 @@ public:
     std::vector<std::array<champsim::msl::fwcounter<champsim::msl::lg2(SHCT_MAX + 1)>, SHCT_SIZE>> SHCT;
 private:
     BARD bard_impl;
+    int next_rand_rrpv =RRPV_MIN;
 public:
     explicit bard_ship(CACHE* cache);
 
@@ -61,6 +62,12 @@ public:
     void replacement_final_stats()
     {
         bard_impl.print_stats();
+    }
+
+    void replacement_cache_fill(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip, champsim::address victim_addr,
+                              access_type type)
+    {
+        update_replacement_state(triggering_cpu, set, way, full_addr, ip, victim_addr, type, 0);
     }
 private:
     int& get_rrpv(long set, long way);

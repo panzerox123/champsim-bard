@@ -74,6 +74,8 @@ public:
 
     BARD(size_t num_positions, long sets, long ways, MEMORY_CONTROLLER*, bool pos_order);
 
+    void print_update_msg(void);
+
     void initialize(void);
     void print_stats(void);
 
@@ -92,7 +94,7 @@ private:
     void set_victim_data(bard_victim_data&, long way, const champsim::cache_block* current_set);
 
     bard_victim_data select_dirty_line(pos_iterator pos_begin, pos_iterator pos_end, const long max_lookup, const champsim::cache_block*);
-    int compute_max_lookup(std::vector<int>::const_iterator, std::vector<int>::const_iterator) const;
+    int compute_max_lookup(const std::vector<int>&) const;
 };
 
 void cache_set_copy_way_contents_and_clean_source(const champsim::cache_block*, long from, long to);

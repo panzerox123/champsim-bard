@@ -22,8 +22,28 @@ BARD::BARD(size_t num_positions, long sets, long ways, MEMORY_CONTROLLER* dram, 
 {}
 
 void
+BARD::print_update_msg()
+{
+    if (s_total_evicts % 100'000 == 0)
+    {
+        fmt::print("num evicts: {}, p: {}, s: {} \t max proactive lookup: {}, max shadow lookup: {}\n", s_total_evicts, s_non_lru_evicts, s_eager_writebacks, get_max_eviction_pos(), get_max_eager_pos());
+
+        fmt::print("\tevict counters:");
+        for (int x : mr_evict.sel)
+            fmt::print(" {}", x);
+
+        fmt::print("\n\teager counters:");
+        for (int x : mr_eager.sel)
+            fmt::print(" {}", x);
+
+        fmt::print("\n");
+    }
+}
+
+void
 BARD::initialize()
 {
+    fmt::print("initializing BARD...\n");
     set_modulus = NUM_SET / opt_bard_sampled_sets;
     ilog2_set_modulus = ilog2(set_modulus);
 }
@@ -55,8 +75,8 @@ BARD::handle_recapture(long set, long way, RecaptureType r)
 
     size_t pos_idx = static_cast<size_t>(set*NUM_WAY + way);
 
-    const int evp = mr_evict.test_pos[pos_idx];
-    const int eap = mr_eager.test_pos[pos_idx];
+    int& evp = mr_evict.test_pos[pos_idx];
+    int& eap = mr_eager.test_pos[pos_idx];
 
     if (r == RecaptureType::LOAD_HIT)
     {
@@ -73,16 +93,18 @@ BARD::handle_recapture(long set, long way, RecaptureType r)
     }
     else
     {
-        if (evp >= 0 && mr_evict.sel[evp] < SEL_MAX)
+        if (evp >= 0)
         {
-            ++mr_evict.sel[evp];
-            mr_evict.sel[evp] = -1;
+            if (mr_evict.sel[evp] < SEL_MAX)
+                ++mr_evict.sel[evp];
+            evp = -1;
         }
 
-        if (eap >= 0 && mr_eager.sel[eap] < SEL_MAX)
+        if (eap >= 0)
         {
-            ++mr_eager.sel[eap];
-            mr_eager.sel[eap] = -1;
+            if (mr_eager.sel[eap] < SEL_MAX)
+                ++mr_eager.sel[eap];
+            eap = -1;
         }
     }
 }
@@ -150,7 +172,7 @@ BARD::find_victim(long initial_victim_way, long set, pos_iterator pos_begin, pos
     // Otherwise, try to find an entry that improves BLP:
     victim = select_dirty_line(pos_begin, pos_end, max_lookup, current_set);
 
-    if (victim.pos < 0)
+    if (victim.way_id < 0)
     {
         return initial_victim_way;
     }
@@ -179,7 +201,10 @@ bool
 BARD::is_sampled_set(long _set) const
 {
     if (set_modulus == 0)
+    {
+        fmt::print("exiting because set modulus is 0\n");
         exit(1);
+    }
 
     size_t s = static_cast<size_t>(_set);
     return (s & (set_modulus-1)) == (s >> ilog2_set_modulus);
@@ -188,13 +213,13 @@ BARD::is_sampled_set(long _set) const
 int
 BARD::get_max_eviction_pos() const
 {
-    return compute_max_lookup(mr_evict.sel.begin(), mr_evict.sel.end());
+    return compute_max_lookup(mr_evict.sel);
 }
 
 int
 BARD::get_max_eager_pos() const
 {
-    return compute_max_lookup(mr_eager.sel.begin(), mr_eager.sel.end());
+    return compute_max_lookup(mr_eager.sel);
 }
 
 void
@@ -221,6 +246,7 @@ BARD::select_dirty_line(pos_iterator pos_begin, pos_iterator pos_end, const long
         bard_victim_data cand;
         cand.pos = *it;
         set_victim_data(cand, way, current_set);
+        ++way;
 
         if (!cand.dirty)
             continue;
@@ -233,7 +259,7 @@ BARD::select_dirty_line(pos_iterator pos_begin, pos_iterator pos_end, const long
                 cand.priority = (bankgroup_write_counters[cand.channel][cand.bankgroup] < address_mapper.banks) && !bank_write_bitvec[cand.channel][cand.bank_idx];
 
             bool cmp = (pos_sort_descending && cand.pos < victim.pos) || (!pos_sort_descending && cand.pos > victim.pos);
-            if (cand.priority && (victim.pos < 0 || cmp))
+            if (cand.priority && (victim.way_id < 0 || cmp))
                 victim = std::move(cand);
         }
     }
@@ -242,7 +268,7 @@ BARD::select_dirty_line(pos_iterator pos_begin, pos_iterator pos_end, const long
 }
 
 int
-BARD::compute_max_lookup(std::vector<int>::const_iterator begin, std::vector<int>::const_iterator end) const
+BARD::compute_max_lookup(const std::vector<int>& sel) const
 {
     if (opt_bard_max_lookup >= 0)
     {
@@ -250,12 +276,16 @@ BARD::compute_max_lookup(std::vector<int>::const_iterator begin, std::vector<int
     }
     else
     {
-        std::vector<int>::const_iterator it;
         if (pos_sort_descending)
-            it = std::find_if(begin, end, [] (auto x) { return x < SEL_THRESHOLD; });
+        {
+            auto it = std::find_if(sel.begin(), sel.end(), [] (auto x) { return x < SEL_THRESHOLD; });
+            return std::min(static_cast<int>(std::distance(sel.begin(), it)), 1);
+        }
         else
-            it = std::find_if(begin, end, [] (auto x) { return x >= SEL_THRESHOLD; });
-        return static_cast<int>(std::distance(begin, it));
+        {
+            auto it = std::find_if(sel.rbegin(), sel.rend(), [] (auto x) { return x < SEL_THRESHOLD; });
+            return std::min(static_cast<int>(sel.size() - std::distance(sel.rbegin(), it)), static_cast<int>(sel.size())-1);
+        }
     }
 }
 

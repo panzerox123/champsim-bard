@@ -8,7 +8,7 @@
 
 srrip::srrip(CACHE* cache) : srrip(cache, cache->NUM_SET, cache->NUM_WAY) {}
 
-srrip::srrip(CACHE* cache, long sets_, long ways_) : replacement(cache)
+srrip::srrip(CACHE* cache, long sets_, long ways_) : replacement(cache), NUM_WAY(ways_)
 {
   std::generate_n(std::back_inserter(sets), sets_, [ways = ways_] { return srrip_set_helper{ways}; });
 }
@@ -24,6 +24,10 @@ long srrip::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, co
 void srrip::update_replacement_state(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip,
                                      champsim::address victim_addr, access_type type, uint8_t hit)
 {
+  if (way == NUM_WAY)
+      return;
+  if (hit && access_type{type} == access_type::WRITE)
+      return;
   sets.at(static_cast<std::size_t>(set)).update(way, hit);
 }
 

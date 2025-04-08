@@ -22,6 +22,8 @@ struct srrip_set_helper {
 
 struct srrip : public champsim::modules::replacement {
 
+  long NUM_WAY;
+
   std::vector<srrip_set_helper> sets;
 
   explicit srrip(CACHE* cache);
@@ -35,6 +37,12 @@ struct srrip : public champsim::modules::replacement {
 
   // use this function to print out your own stats at the end of simulation
   // void replacement_final_stats() {}
+
+  void replacement_cache_fill(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip, champsim::address victim_addr,
+                              access_type type)
+  {
+    update_replacement_state(triggering_cpu, set, way, full_addr, ip, victim_addr, type, 0);
+  }
 };
 
 #endif

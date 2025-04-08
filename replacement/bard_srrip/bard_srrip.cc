@@ -21,6 +21,8 @@ long
 bard_srrip::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, const champsim::cache_block* current_set, champsim::address ip,
                         champsim::address full_addr, access_type type)
 {
+    bard_impl.print_update_msg();
+
     const int max_lookup = bard_impl.get_max_eviction_pos();
 
     auto begin = std::next(rrpv.begin(), set*NUM_WAY);
@@ -28,7 +30,7 @@ bard_srrip::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, co
 
     if (bard_impl.is_sampled_set(set))
     {
-        long rand_way = std::rand();
+        long rand_way = std::rand() % NUM_WAY;
         auto rand_it = std::next(begin, rand_way);
         int r = *rand_it;
 
@@ -36,7 +38,7 @@ bard_srrip::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, co
     }
 
     auto v_it = std::max_element(begin, end);
-    if (max_lookup < 4 && *v_it < max_lookup)
+    if (*v_it < max_lookup)
     {
         // Compute delta from max lookup:
         int d = max_lookup - *v_it;
@@ -80,6 +82,8 @@ bard_srrip::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, co
     if (current_set[victim_way].dirty)
         bard_impl.handle_writeback(current_set[victim_way].address);
 
+    ++bard_impl.s_total_evicts;
+
     return victim_way;
 }
 
@@ -88,9 +92,14 @@ void
 bard_srrip::update_replacement_state(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip,
                                      champsim::address victim_addr, access_type type, uint8_t hit)
 {
-    int initial_rrpv = hit ? 0 : bard_impl.get_max_eviction_pos()-1;
-    if (initial_rrpv < RRPV_MIN)  // Can occur when max lookup = 0
-        initial_rrpv = RRPV_MIN;
+    // I don't know.. some bug in champsim
+    if (way == NUM_WAY)
+        return;
+    if (hit && access_type{type} == access_type::WRITE)
+        return;
+
+    int initial_rrpv = bard_impl.is_sampled_set(set) ? next_rand_rrpv : bard_impl.get_max_eviction_pos()-1;
+    initial_rrpv = std::clamp(initial_rrpv, RRPV_MIN, RRPV_MAX-1);
 
     rrpv[set*NUM_WAY + way] = hit ? 0 : initial_rrpv;
 
@@ -101,5 +110,11 @@ bard_srrip::update_replacement_state(uint32_t triggering_cpu, long set, long way
             bard_impl.handle_recapture(set, way, BARD::RecaptureType::WRITE_HIT);
         else
             bard_impl.handle_recapture(set, way, BARD::RecaptureType::LOAD_HIT);
+    }
+    else if (bard_impl.is_sampled_set(set))
+    {
+        ++next_rand_rrpv;
+        if (next_rand_rrpv > RRPV_MAX)
+            next_rand_rrpv = RRPV_MIN;
     }
 }

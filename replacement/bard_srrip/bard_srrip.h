@@ -19,6 +19,8 @@ private:
     const long NUM_SET;
     const long NUM_WAY;
     std::vector<int> rrpv;
+
+    int next_rand_rrpv =RRPV_MIN;
 public:
     explicit bard_srrip(CACHE* cache);
     bard_srrip(CACHE* cache, long sets_, long ways_);
@@ -37,6 +39,12 @@ public:
     void replacement_final_stats()
     {
         bard_impl.print_stats();
+    }
+
+    void replacement_cache_fill(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip, champsim::address victim_addr,
+                              access_type type)
+    {
+        update_replacement_state(triggering_cpu, set, way, full_addr, ip, victim_addr, type, 0);
     }
 };
 
