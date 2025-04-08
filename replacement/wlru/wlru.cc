@@ -22,7 +22,7 @@ wlru::wlru(CACHE* cache, long sets, long ways)
     eager_lookup_sel(ways, SEL_INIT),
     test_eviction_pos(static_cast<std::size_t>(sets*ways), -1),
     test_eager_pos(static_cast<std::size_t>(sets*ways), -1),
-    set_modulus(sets / NUM_SAMPLED_SETS),
+    set_modulus(sets / opt_bard_sampled_sets),
     ilog2_set_modulus(ilog2(set_modulus))
 {}
 
@@ -287,6 +287,22 @@ wlru::set_victim_data(victim_data& v, size_t idx, const champsim::cache_block* c
 size_t
 wlru::compute_max_lookup(std::vector<int>::const_iterator begin, std::vector<int>::const_iterator end) const
 {
-    auto it = std::find_if(begin, end, [] (auto x) { return x < SEL_THRESHOLD; });
-    return std::distance(begin, it);
+    if (opt_bard_max_lookup >= 0)
+    {
+        return static_cast<size_t>(opt_bard_max_lookup);
+    }
+    else
+    {
+        auto it = std::find_if(begin, end, [] (auto x) { return x < SEL_THRESHOLD; });
+        return std::distance(begin, it);
+    }
+}
+
+bool
+wlru::is_sampled_set(size_t idx) const
+{
+    if (opt_bard_max_lookup >= 0)
+        return false;
+    else
+        return (idx & (set_modulus-1)) == (idx >> ilog2_set_modulus);
 }

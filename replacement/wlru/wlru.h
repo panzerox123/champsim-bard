@@ -36,8 +36,6 @@ private:
     constexpr static int SEL_INIT = SEL_MAX/2+1;
     constexpr static int SEL_THRESHOLD = SEL_INIT;
 
-    constexpr static size_t NUM_SAMPLED_SETS = 64;
-
     long NUM_WAYS;
     std::vector<uint64_t> last_used_cycles;
     uint64_t cycle = 0;
@@ -82,15 +80,15 @@ private:
     long find_eager_candidate(long set, const champsim::cache_block* current_set);
     size_t compute_max_lookup(std::vector<int>::const_iterator, std::vector<int>::const_iterator) const;
 
-    inline bool is_sampled_set(size_t idx) const
-    {
-        return (idx & (set_modulus-1)) == (idx >> ilog2_set_modulus);
-    }
+    bool is_sampled_set(size_t) const;
 };
 
 extern DRAM_PAGE_POLICY opt_dram_page_policy;
 extern bool             opt_bard_use_row_buffer_hits;
 extern bool             opt_bard_use_bitvector;
 extern bool             opt_bard_disable_shadow_writeback;
+
+extern int              opt_bard_max_lookup;
+extern int              opt_bard_sampled_sets;
 
 #endif
