@@ -23,6 +23,9 @@ bard_srrip::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, co
 {
     const int max_lookup = bard_impl.get_max_eviction_pos();
 
+    auto begin = std::next(rrpv.begin(), set*NUM_WAY);
+    auto end = std::next(begin, NUM_WAY);
+
     if (bard_impl.is_sampled_set(set))
     {
         long rand_way = std::rand();
@@ -31,11 +34,6 @@ bard_srrip::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, co
 
         bard_impl.handle_mark(set, rand_way, r, current_set[rand_way].dirty);
     }
-
-    long victim_way{-1};
-
-    auto begin = std::next(rrpv.begin(), set*NUM_WAY);
-    auto end = std::next(begin, NUM_WAY);
 
     auto v_it = std::max_element(begin, end);
     if (max_lookup < 4 && *v_it < max_lookup)
@@ -78,6 +76,9 @@ bard_srrip::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, co
                 if (x > RRPV_MAX)
                     x = RRPV_MAX;
             });
+
+    if (current_set[victim_way].dirty)
+        bard_impl.handle_writeback(current_set[victim_way].address);
 
     return victim_way;
 }

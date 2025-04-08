@@ -1,4 +1,4 @@
-#include "ship.h"
+#include "bard_ship.h"
 
 #include <algorithm>
 #include <cassert>
@@ -7,7 +7,7 @@
 #include "champsim.h"
 
 // initialize replacement state
-ship::ship(CACHE* cache)
+bard_ship::bard_ship(CACHE* cache)
     :replacement(cache),
     NUM_SET(cache->NUM_SET),
     NUM_WAY(cache->NUM_WAY),
@@ -22,13 +22,16 @@ ship::ship(CACHE* cache)
     std::generate_n(std::back_inserter(SHCT), NUM_CPUS, []() -> typename decltype(SHCT)::value_type { return {}; });
 }
 
-int& ship::get_rrpv(long set, long way) { return rrpv_values.at(static_cast<std::size_t>(set * NUM_WAY + way)); }
+int& bard_ship::get_rrpv(long set, long way) { return rrpv_values.at(static_cast<std::size_t>(set * NUM_WAY + way)); }
 
 // find replacement victim
-long ship::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, const champsim::cache_block* current_set, champsim::address ip,
+long bard_ship::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, const champsim::cache_block* current_set, champsim::address ip,
                        champsim::address full_addr, access_type type)
 {
     const int max_lookup = bard_impl.get_max_eviction_pos();
+
+    auto begin = std::next(rrpv_values.begin(), set*NUM_WAY);
+    auto end = std::next(begin, NUM_WAY);
 
     if (bard_impl.is_sampled_set(set))
     {
@@ -38,11 +41,6 @@ long ship::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
 
         bard_impl.handle_mark(set, rand_way, r, current_set[rand_way].dirty);
     }
-
-    long victim_way{-1};
-
-    auto begin = std::next(rrpv_values.begin(), set*NUM_WAY);
-    auto end = std::next(begin, NUM_WAY);
 
     auto v_it = std::max_element(begin, end);
     if (max_lookup < 4 && *v_it < max_lookup)
@@ -86,11 +84,14 @@ long ship::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, con
                     x = RRPV_MAX;
             });
 
+    if (current_set[victim_way].dirty)
+        bard_impl.handle_writeback(current_set[victim_way].address);
+
     return victim_way;
 }
 
 // called on every cache hit and cache fill
-void ship::update_replacement_state(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip,
+void bard_ship::update_replacement_state(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip,
                                     champsim::address victim_addr, access_type type, uint8_t hit)
 {
     using namespace champsim::data::data_literals;

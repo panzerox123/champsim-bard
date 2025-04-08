@@ -68,7 +68,7 @@ long bard_lru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set,
         }
 
         if (current_set[victim_way].dirty)
-            handle_writeback(current_set[victim_way].address);
+            bard_impl.handle_writeback(current_set[victim_way].address);
     }
 
     return victim_way;

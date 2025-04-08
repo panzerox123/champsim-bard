@@ -8,6 +8,7 @@
 BARD::mark_recapture_data_type::mark_recapture_data_type(size_t num_pos, long sets, long ways)
     :sel(num_pos, BARD::SEL_INIT),
     test_pos(static_cast<size_t>(sets*ways), -1)
+{}
 
 BARD::BARD(size_t num_positions, long sets, long ways, MEMORY_CONTROLLER* dram, bool pos_order)
     :bankgroup_write_counters(dram->num_channels, std::vector<size_t>(dram->num_bankgroups, 0)),
@@ -72,7 +73,7 @@ BARD::handle_recapture(long set, long way, RecaptureType r)
     }
     else
     {
-        if (evp >= 0 mr_evict.sel[evp] < SEL_MAX)
+        if (evp >= 0 && mr_evict.sel[evp] < SEL_MAX)
         {
             ++mr_evict.sel[evp];
             mr_evict.sel[evp] = -1;
@@ -93,8 +94,8 @@ BARD::handle_writeback(champsim::address address)
     auto bankgroup = address_mapper.bankgroup(address);
     auto bank_idx = address_mapper.bank_idx(address);
 
-    auto& bg_ctrs = bankgroup_write_counters[victim.channel];
-    auto& ba_bits = bank_write_bitvec[victim.channel];
+    auto& bg_ctrs = bankgroup_write_counters[channel];
+    auto& ba_bits = bank_write_bitvec[channel];
 
     ++bg_ctrs[bankgroup];
     ba_bits[bank_idx] = true;
@@ -121,20 +122,19 @@ BARD::find_victim(long initial_victim_way, long set, pos_iterator pos_begin, pos
     const long max_lookup = get_max_eviction_pos();
 
     // If the replacement policy has already selected a victim, check if it is ok:
+    bard_victim_data victim;
     if (initial_victim_way >= 0)
     {
-        bard_victim_data victim;
-        set_victim(victim, initial_victim_way, current_set);
+        set_victim_data(victim, initial_victim_way, current_set);
 
         // Do not need to do anything if the victim is not dirty
         if (!victim.dirty)
             return initial_victim_way;
 
         // If the line is dirty and it improves BLP, then we can also exit early:
-        if (victim_data.dirty)
+        if (victim.dirty)
         {
-            bard_victim_data victim;
-            set_victim(victim, initial_victim_way, current_set);
+            set_victim_data(victim, initial_victim_way, current_set);
 
             bool ok;
             if (opt_bard_use_bitvector)
@@ -170,9 +170,9 @@ BARD::find_eager_writeback(long set, pos_iterator pos_begin, pos_iterator pos_en
     const long max_lookup = get_max_eager_pos();
     bard_victim_data victim = select_dirty_line(pos_begin, pos_end, max_lookup, current_set);
 
-    if (victim.pos >= 0)
+    if (victim.way_id >= 0)
         ++s_eager_writebacks;
-    return victim;
+    return victim.way_id;
 }
 
 bool
@@ -228,9 +228,9 @@ BARD::select_dirty_line(pos_iterator pos_begin, pos_iterator pos_end, const long
         if ((pos_sort_descending && *it < max_lookup) || (!pos_sort_descending && *it >= max_lookup))
         {
             if (opt_bard_use_bitvector)
-                cand.priority = (bank_write_counters[cand.channel][cand.bank_idx] == 0);
+                cand.priority = !bank_write_bitvec[cand.channel][cand.bank_idx];
             else
-                cand.priority = (bankgroup_write_counters[cand.channel][cand.bankgroup] < address_mapper.banks) && (bank_write_counters[cand.channel][cand.bank_idx] == 0);
+                cand.priority = (bankgroup_write_counters[cand.channel][cand.bankgroup] < address_mapper.banks) && !bank_write_bitvec[cand.channel][cand.bank_idx];
 
             bool cmp = (pos_sort_descending && cand.pos < victim.pos) || (!pos_sort_descending && cand.pos > victim.pos);
             if (cand.priority && (victim.pos < 0 || cmp))
@@ -255,7 +255,7 @@ BARD::compute_max_lookup(std::vector<int>::const_iterator begin, std::vector<int
             it = std::find_if(begin, end, [] (auto x) { return x < SEL_THRESHOLD; });
         else
             it = std::find_if(begin, end, [] (auto x) { return x >= SEL_THRESHOLD; });
-        return std::distance(begin, it);
+        return static_cast<int>(std::distance(begin, it));
     }
 }
 

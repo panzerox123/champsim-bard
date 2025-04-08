@@ -36,7 +36,7 @@ public:
     // use this function to print out your own stats at the end of simulation
     void replacement_final_stats()
     {
-        bard.print_stats();
+        bard_impl.print_stats();
     }
 };
 

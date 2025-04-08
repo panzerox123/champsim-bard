@@ -1,15 +1,16 @@
-#ifndef REPLACEMENT_SHIP_H
-#define REPLACEMENT_SHIP_H
+#ifndef REPLACEMENT_BARD_SHIP_H
+#define REPLACEMENT_BARD_SHIP_H
 
 #include <array>
 #include <vector>
 
+#include "bard.h"
 #include "cache.h"
 #include "modules.h"
 #include "msl/bits.h"
 #include "msl/fwcounter.h"
 
-struct ship : public champsim::modules::replacement {
+struct bard_ship : public champsim::modules::replacement {
 public:
     constexpr static int RRPV_MIN = 0;
     constexpr static int RRPV_MAX = 3;
@@ -43,7 +44,7 @@ public:
 private:
     BARD bard_impl;
 public:
-    explicit ship(CACHE* cache);
+    explicit bard_ship(CACHE* cache);
 
     long find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set, const champsim::cache_block* current_set, champsim::address ip,
                    champsim::address full_addr, access_type type);
@@ -59,7 +60,7 @@ public:
     // use this function to print out your own stats at the end of simulation
     void replacement_final_stats()
     {
-        bard.print_stats();
+        bard_impl.print_stats();
     }
 private:
     int& get_rrpv(long set, long way);
