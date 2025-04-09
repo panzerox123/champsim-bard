@@ -27,7 +27,7 @@ output_folder_name = argv[1]
 build = argv[2]
 cmd_options = argv[3]
 
-INST_SIM = 25_000_000
+INST_SIM = 100_000_000
 INST_WARMUP = 25_000_000
 
 for suite in SUITES:
