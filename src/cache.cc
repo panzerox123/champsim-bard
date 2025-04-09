@@ -224,9 +224,13 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
             auto vwq_set_begin = std::next(block.begin(), vwq_set_id*NUM_WAY);
             auto vwq_set_end = std::next(vwq_set_begin, NUM_WAY);
 
+            if (vwq_set_begin == set_begin)
+                continue;
+
             for (auto it = vwq_set_begin; it != vwq_set_end; it++)
             {
-                if (it->valid && it->dirty && it->vwq_can_use && dram->address_mapper.bank_idx(it->address) == match_bank && dram->address_mapper.row(it->address) == match_row)
+                if (it->valid && it->dirty && it->vwq_can_use 
+                        && dram->address_mapper.bank_idx(it->address) == match_bank && dram->address_mapper.row(it->address) == match_row)
                 {
                     // Try to enqueue:
                     request_type vwq_packet;
@@ -234,15 +238,21 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
                     vwq_packet.address = it->address;
                     vwq_packet.data = it->data;
                     vwq_packet.instr_id = fill_mshr.instr_id;
+                    vwq_packet.ip = champsim::address{};
                     vwq_packet.type = access_type::WRITE;
                     vwq_packet.pf_metadata = it->pf_metadata;
                     vwq_packet.response_requested = false;
                     
                     bool success = lower_level->add_wq(vwq_packet);
                     if (success)
+                    {
                         it->dirty = false;
+//                      fmt::print("VWQ FOUND ROW BUFFER HIT FOR BANK {}, ROW {}, SET {}\n", match_bank, match_row, vwq_set_id);
+                    }
                     else
+                    {
                         break;
+                    }
                 }
             }
         }
