@@ -579,7 +579,7 @@ DRAM_CHANNEL::do_autopre(const DRAM_COMMAND& cmd)
     {
         return true;
     }
-    else
+    else if (opt_dram_page_policy == DRAM_PAGE_POLICY::SOFT_CLOSE)
     {
         auto& q = write_mode ? WQ : RQ;
 
@@ -596,5 +596,12 @@ DRAM_CHANNEL::do_autopre(const DRAM_COMMAND& cmd)
                                         && this->address_mapper.row(e.value().address) == row;
                                 });
         return no_row_hits;
+    }
+    else if (opt_dram_page_policy == DRAM_PAGE_POLICY::OPEN_WRITES_ONLY)
+    {
+        if (cmd.type == DRAM_COMMAND::TYPE::WRITE)
+            return false;
+        else
+            return true;
     }
 }
