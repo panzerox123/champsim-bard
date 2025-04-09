@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-enum class DRAM_PAGE_POLICY { OPEN =0, CLOSE =1, SOFT_CLOSE =2 };
+enum class DRAM_PAGE_POLICY { OPEN =0, CLOSE =1, SOFT_CLOSE =2, OPEN_WRITES_ONLY =3 };
 
 struct DRAM_COMMAND
 {

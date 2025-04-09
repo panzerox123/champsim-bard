@@ -31,8 +31,8 @@ DRAM_CHANNEL::DRAM_CHANNEL(
     RQ(rq_size),
     WQ(wq_size),
     banks(_num_bankgroups*_num_banks, BANK_DATA{}),
-    low_watermark(8),
-    high_watermark(48),
+    low_watermark(wq_size/6),
+    high_watermark((5*wq_size)/6),
     num_bankgroups(_num_bankgroups),
     num_banks(_num_banks),
     num_rows(_num_rows),
@@ -579,7 +579,7 @@ DRAM_CHANNEL::do_autopre(const DRAM_COMMAND& cmd)
     {
         return true;
     }
-    else
+    else if (opt_dram_page_policy == DRAM_PAGE_POLICY::SOFT_CLOSE)
     {
         auto& q = write_mode ? WQ : RQ;
 
@@ -596,5 +596,12 @@ DRAM_CHANNEL::do_autopre(const DRAM_COMMAND& cmd)
                                         && this->address_mapper.row(e.value().address) == row;
                                 });
         return no_row_hits;
+    }
+    else if (opt_dram_page_policy == DRAM_PAGE_POLICY::OPEN_WRITES_ONLY)
+    {
+        if (cmd.type == DRAM_COMMAND::TYPE::WRITE)
+            return false;
+        else
+            return true;
     }
 }

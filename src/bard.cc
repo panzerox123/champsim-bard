@@ -15,19 +15,20 @@ BARD::utility_monitor::utility_monitor(size_t num_pos)
 {}
 
 void
-BARD::utility_monitor::update_max_lookup(bool pos_sort_descending)
+BARD::utility_monitor::update_max_lookup(bool pos_sort_descending, int shift)
 {
     int miss_count = misses;
     max_lookup = pos_sort_descending ? hits.size() : 0;
 
-    const int i_start = pos_sort_descending ? 0 : hits.size() - 1;
+    // Discount LRU position as it will never be forcefully evicted
+    const int i_start = pos_sort_descending ? 1 : hits.size() - 2;
     const int i_end = pos_sort_descending ? hits.size() : -1;
 
     int i = i_start;
     while (i != i_end)
     {
         int new_miss_count = miss_count + hits[i];
-        if (new_miss_count <= misses + (misses>>4))
+        if (new_miss_count <= misses + (misses>>shift))
         {
             miss_count = new_miss_count;
         }
@@ -209,14 +210,14 @@ BARD::handle_hit_miss(long set, long way, position_type pos, bool is_write, bool
 
     if (is_write)
     {
-        if (!is_miss && cache->block[set*NUM_WAY + way].dirty)
+        if (!is_miss && cache->block[set*NUM_WAY+way].dirty)
             ++write_umon.hits[pos];
     }
     else
     {
         if (is_miss)
             ++load_umon.misses;
-        else
+        else if (cache->block[set*NUM_WAY+way].dirty)
             ++load_umon.hits[pos];
     }
 }
@@ -309,7 +310,7 @@ BARD::get_max_eviction_pos()
     }
     else if (opt_bard_use_utility_counters)
     {
-        load_umon.update_max_lookup(pos_sort_descending);
+        load_umon.update_max_lookup(pos_sort_descending, 3);
         return load_umon.max_lookup;
     }
     else
@@ -327,7 +328,7 @@ BARD::get_max_eager_pos()
     }
     else if (opt_bard_use_utility_counters)
     {
-        write_umon.update_max_lookup(pos_sort_descending);
+        write_umon.update_max_lookup(pos_sort_descending, 2);
         return write_umon.max_lookup;
     }
     else

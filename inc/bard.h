@@ -61,7 +61,7 @@ private:
 
         utility_monitor(size_t num_positions);
 
-        void update_max_lookup(bool pos_sort_descending);
+        void update_max_lookup(bool pos_sort_descending, int shift);
         void divide_counters(void);
     };
 
