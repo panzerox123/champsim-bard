@@ -15,10 +15,6 @@ for line in lines:
     os.system(cmd)
 
     jobs += 1
-    if jobs == joblimit_per_sleep:
-        # Wait 12 hours for jobs to complete
-        time.sleep(60*(60*12))
-        jobs = 0
 
-
+print(f'jobs: {jobs}')
 rd.close()
