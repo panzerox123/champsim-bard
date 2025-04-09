@@ -29,7 +29,9 @@ struct dram_stats
     uint32_t num_forced_write_drains =0;
     uint64_t tot_time_in_write_mode =0;
     uint64_t tot_write_imbalance =0;
-    uint32_t tot_wlp =0;
+
+    uint32_t tot_bank_parallelism =0;
+    uint32_t tot_bankgroup_parallelism = 0;
 
     uint64_t tot_read_occu_pre_drain =0;
     uint64_t tot_read_occu_post_drain =0;

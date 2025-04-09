@@ -107,6 +107,7 @@ private:
 
     bool write_drain_started_with_no_read_occu;
     size_t writes_during_drain =0;
+    std::vector<size_t> writes_per_bankgroup;
     std::vector<size_t> writes_per_bank;
     champsim::chrono::clock::time_point write_drain_start{};
 
