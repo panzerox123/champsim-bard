@@ -23,6 +23,9 @@ def collect_stats(build: str, output_file: str):
     for suite in SUITES:
         data_folder = f'out/{build}/{suite}'
 
+        if not os.path.isdir(data_folder):
+            continue
+
         for f in os.listdir(data_folder):
             if not f.endswith('out'):
                 continue
