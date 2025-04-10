@@ -6,7 +6,7 @@ BUILDS = [
     # BARD
     'bard_close',
     # VWQ
-#   'vwq_clopen',
+    'vwq_clopen',
     # SENS
 #   'baseline_close_wb32', 'baseline_close_wb64', 'baseline_close_wb96',
 #   'bard_close_wb32', 'bard_close_wb64', 'bard_close_wb96'
