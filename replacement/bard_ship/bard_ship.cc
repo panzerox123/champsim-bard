@@ -103,8 +103,11 @@ void bard_ship::update_replacement_state(uint32_t triggering_cpu, long set, long
     if (way == NUM_WAY)
         return;
 
-    int initial_rrpv = bard_impl.is_sampled_set(set) ? next_rand_rrpv : bard_impl.get_max_eviction_pos()-1;
-    initial_rrpv = std::clamp(initial_rrpv, RRPV_MIN, RRPV_MAX-1);
+//  int initial_rrpv = bard_impl.is_sampled_set(set) ? next_rand_rrpv : bard_impl.get_max_eviction_pos()-1;
+//  initial_rrpv = std::clamp(initial_rrpv, RRPV_MIN, RRPV_MAX-1);
+    int initial_rrpv = RRPV_MAX-1;
+
+    bard_impl.handle_hit_miss(set, way, get_rrpv(set,way), (access_type{type} == access_type::WRITE), !hit);
 
     // handle writeback access
     if (access_type{type} == access_type::WRITE)

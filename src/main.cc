@@ -48,6 +48,7 @@ bool             opt_cache_enable_vwq;
 
 DRAM_PAGE_POLICY opt_dram_page_policy;
 bool             opt_dram_ideal_wlp;
+bool             opt_dram_use_x8_write_timing;
 
 bool opt_bard_use_row_buffer_hits;
 bool opt_bard_use_bitvector;
@@ -115,6 +116,7 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
 
   app.add_option("--dram-page-policy", dram_page_policy, "0 = open, 1 = close, 2 = soft-close");
   app.add_flag("--dram-ideal-wlp", opt_dram_ideal_wlp, "enable to ensure writes go to banks uniformly");
+  app.add_flag("--dram-use-x8-write-timing", opt_dram_use_x8_write_timing, "enable to set tCCD_L_WR = 10ns");
   /*
    * BARD OPTIONS;
    * */

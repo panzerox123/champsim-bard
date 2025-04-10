@@ -92,16 +92,8 @@ void
 bard_srrip::update_replacement_state(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip,
                                      champsim::address victim_addr, access_type type, uint8_t hit)
 {
-    // I don't know.. some bug in champsim
     if (way == NUM_WAY)
         return;
-    if (hit && access_type{type} == access_type::WRITE)
-        return;
-
-    int initial_rrpv = bard_impl.is_sampled_set(set) ? next_rand_rrpv : bard_impl.get_max_eviction_pos()-1;
-    initial_rrpv = std::clamp(initial_rrpv, RRPV_MIN, RRPV_MAX-1);
-
-    rrpv[set*NUM_WAY + way] = hit ? 0 : initial_rrpv;
 
     // Update bard:
     if (hit)
@@ -117,4 +109,14 @@ bard_srrip::update_replacement_state(uint32_t triggering_cpu, long set, long way
         if (next_rand_rrpv > RRPV_MAX)
             next_rand_rrpv = RRPV_MIN;
     }
+    bard_impl.handle_hit_miss(set, way, rrpv[set*NUM_WAY + way], (access_type{type} == access_type::WRITE), !hit);
+
+    if (hit && access_type{type} == access_type::WRITE)
+        return;
+
+//  int initial_rrpv = bard_impl.is_sampled_set(set) ? next_rand_rrpv : bard_impl.get_max_eviction_pos()-1;
+//  initial_rrpv = std::clamp(initial_rrpv, RRPV_MIN, RRPV_MAX-1);
+    int initial_rrpv = RRPV_MAX-1;
+
+    rrpv[set*NUM_WAY + way] = hit ? 0 : initial_rrpv;
 }

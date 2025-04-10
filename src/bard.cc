@@ -291,6 +291,9 @@ BARD::find_eager_writeback(long set, pos_iterator pos_begin, pos_iterator pos_en
 bool
 BARD::is_sampled_set(long _set) const
 {
+    if (opt_bard_max_lookup >= 0)
+        return false;
+
     if (set_modulus == 0)
     {
         fmt::print("exiting because set modulus is 0\n");

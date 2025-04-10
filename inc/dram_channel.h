@@ -145,5 +145,6 @@ private:
  * */
 extern DRAM_PAGE_POLICY opt_dram_page_policy;
 extern bool             opt_dram_ideal_wlp;
+extern bool             opt_dram_use_x8_write_timing;
 
 #endif   // DRAM_CHANNEL_h
