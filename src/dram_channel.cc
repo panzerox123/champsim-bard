@@ -277,7 +277,10 @@ DRAM_CHANNEL::schedule_ready_request()
             else if (cmd.type == DRAM_COMMAND::TYPE::WRITE)
             {
                 update(bb.state.read_ok, same_bankgroup ? dram_timing.tCCD_L_WTR : dram_timing.tCCD_S_WTR);
-                update(bb.state.write_ok, same_bankgroup ? dram_timing.tCCD_L_WR : dram_timing.tCCD_S_WR);
+                if (opt_dram_use_x8_write_timing)
+                    update(bb.state.write_ok, same_bankgroup ? dram_timing.tCCD_L_WR/2 : dram_timing.tCCD_S_WR);
+                else
+                    update(bb.state.write_ok, same_bankgroup ? dram_timing.tCCD_L_WR : dram_timing.tCCD_S_WR);
             }
             else if (cmd.type == DRAM_COMMAND::TYPE::ACTIVATE)
             {
