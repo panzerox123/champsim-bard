@@ -2,14 +2,18 @@ import os
 
 BUILDS = [
     # BASELINE
-    'baseline_close', 'baseline_close_srrip', 'baseline_close_ship',
+#   'baseline', 'baseline_srrip',
     # BARD
-    'bard_close', 'bard_close_srrip', 'bard_close_ship',
+#   'bard', 'bard_srrip',
     # VWQ
-    'vwq_clopen',
+#   'vwq',
+    # EAGER WRITEBACK
+#   'eager_writeback',
     # SENS
-    'baseline_close_wb32', 'baseline_close_wb64', 'baseline_close_wb96',
-    'bard_close_wb32', 'bard_close_wb64', 'bard_close_wb96'
+#   'baseline_wb32', 'baseline_wb64', 'baseline_wb96', 'baseline_wb128',
+#   'bard_wb32', 'bard_wb64', 'bard_wb96', 'bard_wb128',
+    'baseline_mop4', 'bard_mop4',
+#   'baseline_16c', 'bard_16c'
 ]
 
 for b in BUILDS:

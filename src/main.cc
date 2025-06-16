@@ -45,6 +45,7 @@ std::vector<phase_stats> main(environment& env, std::vector<phase_info>& phases,
  * EXTERNAL OPTIONS:
  * */
 bool             opt_cache_enable_vwq;
+bool             opt_cache_enable_eager_writeback;
 
 DRAM_PAGE_POLICY opt_dram_page_policy;
 bool             opt_dram_ideal_wlp;
@@ -113,6 +114,7 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
   int dram_page_policy = 0;
 
   app.add_flag("--cache-enable-vwq", opt_cache_enable_vwq, "enable VWQ for caches with a non-null DRAM ptr");
+  app.add_flag("--cache-enable-eager-writeback", opt_cache_enable_eager_writeback, "enable Eager Writeback for caches with a non-null DRAM ptr");
 
   app.add_option("--dram-page-policy", dram_page_policy, "0 = open, 1 = close, 2 = soft-close");
   app.add_flag("--dram-ideal-wlp", opt_dram_ideal_wlp, "enable to ensure writes go to banks uniformly");

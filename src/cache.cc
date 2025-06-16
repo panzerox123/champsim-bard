@@ -168,69 +168,75 @@ champsim::address CACHE::module_address(const T& element) const
 
 bool CACHE::handle_fill(const mshr_type& fill_mshr)
 {
-  cpu = fill_mshr.cpu;
+    cpu = fill_mshr.cpu;
 
-  // find victim
-  auto [set_begin, set_end] = get_set_span(fill_mshr.address);
-  auto way = std::find_if_not(set_begin, set_end, [](auto x) { return x.valid; });
-  if (way == set_end) {
-    way = std::next(set_begin, impl_find_victim(fill_mshr.cpu, fill_mshr.instr_id, get_set_index(fill_mshr.address), &*set_begin, fill_mshr.ip,
-                                                fill_mshr.address, fill_mshr.type));
-  }
-  assert(set_begin <= way);
-  assert(way <= set_end);
-  assert(way != set_end || fill_mshr.type != access_type::WRITE); // Writes may not bypass
-  const auto way_idx = std::distance(set_begin, way);             // cast protected by earlier assertion
+    // find victim
+    auto [set_begin, set_end] = get_set_span(fill_mshr.address);
+    auto way = std::find_if_not(set_begin, set_end, [](auto x) { return x.valid; });
+    if (way == set_end) {
+        way = std::next(set_begin, impl_find_victim(fill_mshr.cpu, fill_mshr.instr_id, get_set_index(fill_mshr.address), &*set_begin, fill_mshr.ip,
+                                                                                                fill_mshr.address, fill_mshr.type));
+    }
+    assert(set_begin <= way);
+    assert(way <= set_end);
+    assert(way != set_end || fill_mshr.type != access_type::WRITE); // Writes may not bypass
+    const auto way_idx = std::distance(set_begin, way);                         // cast protected by earlier assertion
 
-  if constexpr (champsim::debug_print) {
-    fmt::print("[{}] {} instr_id: {} address: {} v_address: {} set: {} way: {} type: {} prefetch_metadata: {} cycle_enqueued: {} cycle: {}\n", NAME, __func__,
-               fill_mshr.instr_id, fill_mshr.address, fill_mshr.v_address, get_set_index(fill_mshr.address), way_idx,
-               access_type_names.at(champsim::to_underlying(fill_mshr.type)), fill_mshr.data_promise->pf_metadata,
-               (fill_mshr.time_enqueued.time_since_epoch()) / clock_period, (current_time.time_since_epoch()) / clock_period);
-  }
-
-  if (way != set_end && way->valid && way->dirty)
-  {
-    request_type writeback_packet;
-
-    writeback_packet.cpu = fill_mshr.cpu;
-    writeback_packet.address = way->address;
-    writeback_packet.data = way->data;
-    writeback_packet.instr_id = fill_mshr.instr_id;
-    writeback_packet.ip = champsim::address{};
-    writeback_packet.type = access_type::WRITE;
-    writeback_packet.pf_metadata = way->pf_metadata;
-    writeback_packet.response_requested = false;
-
-    if constexpr (champsim::debug_print)
-    {
-      fmt::print("[{}] {} evict address: {:#x} v_address: {:#x} prefetch_metadata: {}\n", NAME, __func__, writeback_packet.address, writeback_packet.v_address,
-                 fill_mshr.data_promise->pf_metadata);
+    if constexpr (champsim::debug_print) {
+        fmt::print("[{}] {} instr_id: {} address: {} v_address: {} set: {} way: {} type: {} prefetch_metadata: {} cycle_enqueued: {} cycle: {}\n", NAME, __func__,
+                             fill_mshr.instr_id, fill_mshr.address, fill_mshr.v_address, get_set_index(fill_mshr.address), way_idx,
+                             access_type_names.at(champsim::to_underlying(fill_mshr.type)), fill_mshr.data_promise->pf_metadata,
+                             (fill_mshr.time_enqueued.time_since_epoch()) / clock_period, (current_time.time_since_epoch()) / clock_period);
     }
 
-    auto success = lower_level->add_wq(writeback_packet);
-    if (!success) {
-      return false;
-    }
-
-    // Perform virtual write queue writebacks (check random sets for writebacks because we are using a page-permutation based address mapping):
-    if (dram != nullptr && opt_cache_enable_vwq)
+    if (way != set_end && way->valid && way->dirty)
     {
-        size_t match_bank = dram->address_mapper.bank_idx(way->address);
-        size_t match_row = dram->address_mapper.row(way->address);
-        for (size_t tries = 0; tries < 64; tries++)
+        request_type writeback_packet;
+
+        writeback_packet.cpu = fill_mshr.cpu;
+        writeback_packet.address = way->address;
+        writeback_packet.data = way->data;
+        writeback_packet.instr_id = fill_mshr.instr_id;
+        writeback_packet.ip = champsim::address{};
+        writeback_packet.type = access_type::WRITE;
+        writeback_packet.pf_metadata = way->pf_metadata;
+        writeback_packet.response_requested = false;
+
+        if constexpr (champsim::debug_print)
         {
-            size_t vwq_set_id = std::rand() % NUM_SET;
-            auto vwq_set_begin = std::next(block.begin(), vwq_set_id*NUM_WAY);
-            auto vwq_set_end = std::next(vwq_set_begin, NUM_WAY);
+            fmt::print("[{}] {} evict address: {:#x} v_address: {:#x} prefetch_metadata: {}\n", NAME, __func__, writeback_packet.address, writeback_packet.v_address,
+                                 fill_mshr.data_promise->pf_metadata);
+        }
 
-            if (vwq_set_begin == set_begin)
-                continue;
+        auto success = lower_level->add_wq(writeback_packet);
+        if (!success) {
+            return false;
+        }
 
-            for (auto it = vwq_set_begin; it != vwq_set_end; it++)
+        // Perform virtual write queue writebacks (check random sets for writebacks because we are using a page-permutation based address mapping):
+        if (dram != nullptr && opt_cache_enable_vwq)
+        {
+            size_t match_bank = dram->address_mapper.bank_idx(way->address);
+            size_t match_row = dram->address_mapper.row(way->address);
+            for (size_t tries = 0; tries < 64; tries++)
             {
-                if (it->valid && it->dirty && it->vwq_can_use 
-                        && dram->address_mapper.bank_idx(it->address) == match_bank && dram->address_mapper.row(it->address) == match_row)
+                size_t vwq_set_id = std::rand() % NUM_SET;
+                auto vwq_set_begin = std::next(block.begin(), vwq_set_id*NUM_WAY);
+                auto vwq_set_end = std::next(vwq_set_begin, NUM_WAY);
+
+                if (vwq_set_begin == set_begin)
+                    continue;
+                
+                auto it = std::find_if(vwq_set_begin, vwq_set_end,
+                                [match_bank, match_row, this]
+                                (const auto& e)
+                                {
+                                    return e.valid && e.dirty && e.vwq_can_use
+                                            && this->dram->address_mapper.bank_idx(e.address) == match_bank
+                                            && this->dram->address_mapper.row(e.address) == match_row;
+                                });
+
+                if (it != vwq_set_end)
                 {
                     // Try to enqueue:
                     request_type vwq_packet;
@@ -245,99 +251,107 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
                     
                     bool success = lower_level->add_wq(vwq_packet);
                     if (success)
-                    {
                         it->dirty = false;
-//                      fmt::print("VWQ FOUND ROW BUFFER HIT FOR BANK {}, ROW {}, SET {}\n", match_bank, match_row, vwq_set_id);
-                    }
                     else
-                    {
                         break;
-                    }
                 }
             }
         }
     }
-  }
 
-  champsim::address evicting_address{};
-  if (way != set_end && way->valid) {
-    evicting_address = module_address(*way);
-  }
-
-  auto metadata_thru = impl_prefetcher_cache_fill(module_address(fill_mshr), get_set_index(fill_mshr.address), way_idx,
-                                                  (fill_mshr.type == access_type::PREFETCH), evicting_address, fill_mshr.data_promise->pf_metadata);
-  impl_replacement_cache_fill(fill_mshr.cpu, get_set_index(fill_mshr.address), way_idx, module_address(fill_mshr), fill_mshr.ip, evicting_address,
-                              fill_mshr.type);
-
-  if (way != set_end) {
-    if (way->valid && way->prefetch) {
-      ++sim_stats.pf_useless;
+    champsim::address evicting_address{};
+    if (way != set_end && way->valid) {
+        evicting_address = module_address(*way);
     }
 
-    if (fill_mshr.type == access_type::PREFETCH) {
-      ++sim_stats.pf_fill;
+    auto metadata_thru = impl_prefetcher_cache_fill(module_address(fill_mshr), get_set_index(fill_mshr.address), way_idx,
+                                                                                                    (fill_mshr.type == access_type::PREFETCH), evicting_address, fill_mshr.data_promise->pf_metadata);
+    impl_replacement_cache_fill(fill_mshr.cpu, get_set_index(fill_mshr.address), way_idx, module_address(fill_mshr), fill_mshr.ip, evicting_address,
+                                                            fill_mshr.type);
+
+    if (way != set_end)
+    {
+        if (way->valid && way->prefetch)
+        {
+            ++sim_stats.pf_useless;
+        }
+
+        if (fill_mshr.type == access_type::PREFETCH)
+        {
+            ++sim_stats.pf_fill;
+        }
+
+        *way = fill_block(fill_mshr, metadata_thru);
+
+        // Do eager writeback
+        if (dram != nullptr && opt_cache_enable_eager_writeback)
+        {
+            do_eager_writeback(set_begin, set_end, fill_mshr.cpu, fill_mshr.instr_id);
+        }
     }
 
-    *way = fill_block(fill_mshr, metadata_thru);
-  }
+    // COLLECT STATS
+    if (fill_mshr.type != access_type::PREFETCH)
+        sim_stats.total_miss_latency_cycles += (current_time - (fill_mshr.time_enqueued + clock_period)) / clock_period;
+    sim_stats.mshr_return.increment(std::pair{fill_mshr.type, fill_mshr.cpu});
 
-  // COLLECT STATS
-  if (fill_mshr.type != access_type::PREFETCH)
-    sim_stats.total_miss_latency_cycles += (current_time - (fill_mshr.time_enqueued + clock_period)) / clock_period;
-  sim_stats.mshr_return.increment(std::pair{fill_mshr.type, fill_mshr.cpu});
+    response_type response{fill_mshr.address, fill_mshr.v_address, fill_mshr.data_promise->data, metadata_thru, fill_mshr.instr_depend_on_me};
+    for (auto* ret : fill_mshr.to_return) {
+        ret->push_back(response);
+    }
 
-  response_type response{fill_mshr.address, fill_mshr.v_address, fill_mshr.data_promise->data, metadata_thru, fill_mshr.instr_depend_on_me};
-  for (auto* ret : fill_mshr.to_return) {
-    ret->push_back(response);
-  }
-
-  return true;
+    return true;
 }
 
 bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
 {
-  cpu = handle_pkt.cpu;
+    cpu = handle_pkt.cpu;
 
-  // access cache
-  auto [set_begin, set_end] = get_set_span(handle_pkt.address);
-  auto way = std::find_if(set_begin, set_end, [matcher = matches_address(handle_pkt.address)](const auto& x) { return x.valid && matcher(x); });
-  const auto hit = (way != set_end);
-  const auto useful_prefetch = (hit && way->prefetch && !handle_pkt.prefetch_from_this);
+    // access cache
+    auto [set_begin, set_end] = get_set_span(handle_pkt.address);
+    auto way = std::find_if(set_begin, set_end, [matcher = matches_address(handle_pkt.address)](const auto& x) { return x.valid && matcher(x); });
+    const auto hit = (way != set_end);
+    const auto useful_prefetch = (hit && way->prefetch && !handle_pkt.prefetch_from_this);
 
-  if constexpr (champsim::debug_print) {
-    fmt::print("[{}] {} instr_id: {} address: {} v_address: {} data: {} set: {} way: {} ({}) type: {} cycle: {}\n", NAME, __func__, handle_pkt.instr_id,
-               handle_pkt.address, handle_pkt.v_address, handle_pkt.data, get_set_index(handle_pkt.address), std::distance(set_begin, way),
-               hit ? "HIT" : "MISS", access_type_names.at(champsim::to_underlying(handle_pkt.type)), current_time.time_since_epoch() / clock_period);
-  }
-
-  auto metadata_thru = handle_pkt.pf_metadata;
-  if (should_activate_prefetcher(handle_pkt)) {
-    metadata_thru = impl_prefetcher_cache_operate(module_address(handle_pkt), handle_pkt.ip, hit, useful_prefetch, handle_pkt.type, metadata_thru);
-  }
-
-  // update replacement policy
-  const auto way_idx = std::distance(set_begin, way);
-  impl_update_replacement_state(handle_pkt.cpu, get_set_index(handle_pkt.address), way_idx, module_address(handle_pkt), handle_pkt.ip, {}, handle_pkt.type,
-                                hit);
-
-  if (hit) {
-    sim_stats.hits.increment(std::pair{handle_pkt.type, handle_pkt.cpu});
-
-    response_type response{handle_pkt.address, handle_pkt.v_address, way->data, metadata_thru, handle_pkt.instr_depend_on_me};
-    for (auto* ret : handle_pkt.to_return) {
-      ret->push_back(response);
+    if constexpr (champsim::debug_print) {
+        fmt::print("[{}] {} instr_id: {} address: {} v_address: {} data: {} set: {} way: {} ({}) type: {} cycle: {}\n", NAME, __func__, handle_pkt.instr_id,
+                             handle_pkt.address, handle_pkt.v_address, handle_pkt.data, get_set_index(handle_pkt.address), std::distance(set_begin, way),
+                             hit ? "HIT" : "MISS", access_type_names.at(champsim::to_underlying(handle_pkt.type)), current_time.time_since_epoch() / clock_period);
     }
 
-    way->dirty |= (handle_pkt.type == access_type::WRITE);
-
-    // update prefetch stats and reset prefetch bit
-    if (useful_prefetch) {
-      ++sim_stats.pf_useful;
-      way->prefetch = false;
+    auto metadata_thru = handle_pkt.pf_metadata;
+    if (should_activate_prefetcher(handle_pkt)) {
+        metadata_thru = impl_prefetcher_cache_operate(module_address(handle_pkt), handle_pkt.ip, hit, useful_prefetch, handle_pkt.type, metadata_thru);
     }
-  }
 
-  return hit;
+    // update replacement policy
+    const auto way_idx = std::distance(set_begin, way);
+    impl_update_replacement_state(handle_pkt.cpu, get_set_index(handle_pkt.address), way_idx, module_address(handle_pkt), handle_pkt.ip, {}, handle_pkt.type,
+                                                                hit);
+
+    if (hit) {
+        sim_stats.hits.increment(std::pair{handle_pkt.type, handle_pkt.cpu});
+
+        response_type response{handle_pkt.address, handle_pkt.v_address, way->data, metadata_thru, handle_pkt.instr_depend_on_me};
+        for (auto* ret : handle_pkt.to_return) {
+            ret->push_back(response);
+        }
+
+        way->dirty |= (handle_pkt.type == access_type::WRITE);
+
+        // update prefetch stats and reset prefetch bit
+        if (useful_prefetch) {
+            ++sim_stats.pf_useful;
+            way->prefetch = false;
+        }
+
+        if (dram != nullptr && opt_cache_enable_eager_writeback)
+        {
+            do_eager_writeback(set_begin, set_end, handle_pkt.cpu, handle_pkt.instr_id);
+        }
+    }
+
+    return hit;
 }
 
 auto CACHE::mshr_and_forward_packet(const tag_lookup_type& handle_pkt) -> std::pair<mshr_type, request_type>
@@ -980,4 +994,31 @@ void CACHE::print_deadlock()
     champsim::range_print_deadlock(ul->PQ, NAME + "_PQ", q_writer, q_entry_pack);
   }
 }
+
 // LCOV_EXCL_STOP
+
+
+
+void
+CACHE::do_eager_writeback(set_type::iterator set_begin, set_type::iterator set_end, int cpu, int instr_id)
+{
+    auto it = std::find_if(set_begin, set_end, 
+                        [] (const auto& e) { return e.valid && e.dirty && e.vwq_can_use; });
+    if (it != set_end)
+    {
+        // Do eager writeback:
+        request_type eager_packet;
+        eager_packet.cpu = cpu;
+        eager_packet.address = it->address;
+        eager_packet.data = it->data;
+        eager_packet.instr_id = instr_id;
+        eager_packet.ip = champsim::address{};
+        eager_packet.type = access_type::WRITE;
+        eager_packet.pf_metadata = it->pf_metadata;
+        eager_packet.response_requested = false;
+        
+        bool success = lower_level->add_wq(eager_packet);
+        if (success)
+            it->dirty = false;
+    }
+}

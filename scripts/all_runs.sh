@@ -1,33 +1,76 @@
 #!/bin/sh
 
-# BASELINE_LRU:
-python3 scripts/run_all_workloads.py baseline_close baseline_close "--dram-page-policy 1" > commands.out
+rm commands.out
+touch commands.out
 
-# BARD_LRU:
-python3 scripts/run_all_workloads.py bard_close bard_close "--dram-page-policy 1 --bard-use-utility-counters" >> commands.out
+#####################################
+# BASELINE                          #
+#####################################
 
-# VWQ
-python3 scripts/run_all_workloads.py vwq vwq_clopen "--dram-page-policy 3 --cache-enable-vwq" >> commands.out
+python3 scripts/run_all_workloads.py baseline baseline "--dram-page-policy 1" >> commands.out
 
-# BARD LRU SENS
-#python3 scripts/run_all_workloads.py bard_close_proactive_only_no_umon bard_close "--dram-page-policy 1 --bard-only-proactive-writeback --bard-max-lookup 16" >> commands.out
-#python3 scripts/run_all_workloads.py bard_close_shadow_only_no_umon bard_close "--dram-page-policy 1 --bard-only-shadow-writeback --bard-max-lookup 16" >> commands.out
+# repl sensitivity
+python3 scripts/run_all_workloads.py baseline_srrip baseline_srrip "--dram-page-policy 1" >> commands.out
 
-#python3 scripts/run_all_workloads.py bard_close_lookup4 bard_close "--dram-page-policy 1 --bard-max-lookup 4" >> commands.out
-#python3 scripts/run_all_workloads.py bard_close_lookup8 bard_close "--dram-page-policy 1 --bard-max-lookup 8" >> commands.out
-#python3 scripts/run_all_workloads.py bard_close_lookup16 bard_close "--dram-page-policy 1 --bard-max-lookup 16" >> commands.out
+# address mapping + row closure sensitivity
+python3 scripts/run_all_workloads.py baseline_open baseline "--dram-page-policy 0" >> commands.out
+python3 scripts/run_all_workloads.py baseline_soft_close baseline "--dram-page-policy 2" >> commands.out
 
-# WRITE BUFFER SENS
-python3 scripts/run_all_workloads.py baseline_close_wb32 baseline_close_wb32 "--dram-page-policy 1" >> commands.out
-python3 scripts/run_all_workloads.py baseline_close_wb64 baseline_close_wb64 "--dram-page-policy 1" >> commands.out
-#python3 scripts/run_all_workloads.py baseline_close_wb96 baseline_close_wb96 "--dram-page-policy 1" >> commands.out
+python3 scripts/run_all_workloads.py baseline_mop4 baseline_mop4 "--dram-page-policy 1" >> commands.out
+python3 scripts/run_all_workloads.py baseline_mop4_open baseline_mop4 "--dram-page-policy 0" >> commands.out
+python3 scripts/run_all_workloads.py baseline_mop4_soft_close baseline_mop4 "--dram-page-policy 2" >> commands.out
 
-python3 scripts/run_all_workloads.py bard_close_wb32 bard_close_wb32 "--dram-page-policy 1 --bard-use-utility-counters" >> commands.out
-python3 scripts/run_all_workloads.py bard_close_wb64 bard_close_wb64 "--dram-page-policy 1 --bard-use-utility-counters" >> commands.out
-#python3 scripts/run_all_workloads.py bard_close_wb96 bard_close_wb96 "--dram-page-policy 1 --bard-use-utility-counters" >> commands.out
+# x8 sensitivity
+python3 scripts/run_all_workloads.py baseline_x8 baseline "--dram-page-policy 1 --dram-use-x8-write-timing" >> commands.out
 
-# SAMPLED SETS SENS
-#python3 scripts/run_all_workloads.py bard_close_s16 bard_close "--dram-page-policy 1 --bard-sampled-sets 16" >> commands.out
-#python3 scripts/run_all_workloads.py bard_close_s32 bard_close "--dram-page-policy 1 --bard-sampled-sets 32" >> commands.out
-#python3 scripts/run_all_workloads.py bard_close_s64 bard_close "--dram-page-policy 1 --bard-sampled-sets 64" >> commands.out
+# write buffer sensitivity
+python3 scripts/run_all_workloads.py baseline_wb32 baseline_wb32 "--dram-page-policy 1" >> commands.out
+python3 scripts/run_all_workloads.py baseline_wb64 baseline_wb64 "--dram-page-policy 1" >> commands.out
+python3 scripts/run_all_workloads.py baseline_wb96 baseline_wb96 "--dram-page-policy 1" >> commands.out
+python3 scripts/run_all_workloads.py baseline_wb128 baseline_wb128 "--dram-page-policy 1" >> commands.out
+
+# 16 core sensitivity
+python3 scripts/run_all_workloads.py baseline_16c baseline_16c "--dram-page-policy 1" >> commands.out
+
+#####################################
+# BARD                              #
+#####################################
+
+python3 scripts/run_all_workloads.py bard bard "--dram-page-policy 1 --bard-max-lookup 16 --bard-use-bitvector" >> commands.out
+
+# repl sensitivity
+python3 scripts/run_all_workloads.py bard_srrip bard_srrip "--dram-page-policy 1 --bard-max-lookup 16 --bard-use-bitvector" >> commands.out
+
+# address mapping + row closure sensitivity
+python3 scripts/run_all_workloads.py bard_open bard "--dram-page-policy 0 --bard-max-lookup 16 --bard-use-bitvector" >> commands.out
+python3 scripts/run_all_workloads.py bard_soft_close bard "--dram-page-policy 2 --bard-max-lookup 16 --bard-use-bitvector" >> commands.out
+
+python3 scripts/run_all_workloads.py bard_mop4 bard_mop4 "--dram-page-policy 1 --bard-max-lookup 16 --bard-use-bitvector" >> commands.out
+python3 scripts/run_all_workloads.py bard_mop4_open bard_mop4 "--dram-page-policy 0 --bard-max-lookup 16 --bard-use-bitvector" >> commands.out
+python3 scripts/run_all_workloads.py bard_mop4_soft_close bard_mop4 "--dram-page-policy 2 --bard-max-lookup 16 --bard-use-bitvector" >> commands.out
+
+# x8 sensitivity
+python3 scripts/run_all_workloads.py bard_x8 bard "--dram-page-policy 1 --bard-max-lookup 16 --dram-use-x8-write-timing --bard-use-bitvector" >> commands.out
+
+# write buffer sensitivity
+python3 scripts/run_all_workloads.py bard_wb32 bard_wb32 "--dram-page-policy 1 --bard-max-lookup 16 --bard-use-bitvector" >> commands.out
+python3 scripts/run_all_workloads.py bard_wb64 bard_wb64 "--dram-page-policy 1 --bard-max-lookup 16 --bard-use-bitvector" >> commands.out
+python3 scripts/run_all_workloads.py bard_wb96 bard_wb96 "--dram-page-policy 1 --bard-max-lookup 16 --bard-use-bitvector" >> commands.out
+python3 scripts/run_all_workloads.py bard_wb128 bard_wb128 "--dram-page-policy 1 --bard-max-lookup 16 --bard-use-bitvector" >> commands.out
+
+# lookup Sensitivity
+python3 scripts/run_all_workloads.py bard_restrict2way bard "--dram-page-policy 1 --bard-max-lookup 2 --bard-use-bitvector" >> commands.out
+python3 scripts/run_all_workloads.py bard_restrict4way bard "--dram-page-policy 1 --bard-max-lookup 4 --bard-use-bitvector" >> commands.out
+python3 scripts/run_all_workloads.py bard_restrict8way bard "--dram-page-policy 1 --bard-max-lookup 8 --bard-use-bitvector" >> commands.out
+python3 scripts/run_all_workloads.py bard_restrict8way bard "--dram-page-policy 1 --bard-max-lookup 12 --bard-use-bitvector" >> commands.out
+
+# 16 core sensitivity
+python3 scripts/run_all_workloads.py bard_16c bard_16c "--dram-page-policy 1 --bard-max-lookup 16 --bard-use-bitvector" >> commands.out
+
+#####################################
+# OTHER                             #
+#####################################
+
+python3 scripts/run_all_workloads.py eager eager_writeback "--dram-page-policy 1 --cache-enable-eager-writeback" >> commands.out
+python3 scripts/run_all_workloads.py vwq vwq "--dram-page-policy 3 --cache-enable-vwq" >> commands.out
 

@@ -49,6 +49,7 @@
 
 class CACHE : public champsim::operable
 {
+private:
   enum [[deprecated(
       "Prefetchers may not specify arbitrary fill levels. Use CACHE::prefetch_line(pf_addr, fill_this_level, prefetch_metadata) instead.")]] FILL_LEVEL{
       FILL_L1 = 1, FILL_L2 = 2, FILL_LLC = 4, FILL_DRC = 8, FILL_DRAM = 16};
@@ -144,6 +145,8 @@ private:
 
   auto matches_address(champsim::address address) const;
   std::pair<mshr_type, request_type> mshr_and_forward_packet(const tag_lookup_type& handle_pkt);
+
+  void do_eager_writeback(set_type::iterator, set_type::iterator, int cpu, int instr_id);
 
   std::deque<tag_lookup_type> internal_PQ{};
   std::deque<tag_lookup_type> inflight_tag_check{};
@@ -542,5 +545,6 @@ void CACHE::replacement_module_model<Rs...>::impl_replacement_final_stats()
  * Command-line options:
  * */
 extern bool opt_cache_enable_vwq;
+extern bool opt_cache_enable_eager_writeback;
 
 #endif

@@ -44,5 +44,9 @@ for suite in SUITES:
             continue
         trace_filepath = f'{trace_folder}/{trace}'
 
-        trace_part = ' '.join([trace_filepath for _ in range(8)])
+        num_cores = 8
+        if '16c' in build:
+            num_cores = 16
+
+        trace_part = ' '.join([trace_filepath for _ in range(num_cores)])
         print(f'./bin/{build} {trace_part} --warmup-instructions {INST_WARMUP} --simulation-instructions {INST_SIM} {cmd_options} > {output_folder}/{name}.out')

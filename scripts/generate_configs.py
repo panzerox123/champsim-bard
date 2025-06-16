@@ -4,7 +4,10 @@ CONFIG_FOLDER_PATH = 'json'
 
 def write_config_file(output_file: str,
                       llc_repl: str,
-                      dram_write_buffer_size: int
+                      dram_write_buffer_size=48,
+                      address_mapping='pzen',
+                      num_cores=8,
+                      num_channels=2
 ):
     wr = open(f'{CONFIG_FOLDER_PATH}/{output_file}.json', 'w')
     wr.write(f'''{{
@@ -12,7 +15,7 @@ def write_config_file(output_file: str,
     "block_size": 64,
     "page_size": 2097152,
     "heartbeat_frequency": 10000000,
-    "num_cores": 8,
+    "num_cores": {num_cores},
 
     "ooo_cpu": [
         {{
@@ -21,7 +24,7 @@ def write_config_file(output_file: str,
             "decode_buffer_size":32,
             "dispatch_buffer_size":32,
             "register_file_size":128,
-            "rob_size": 352,
+            "rob_size": 512,
             "lq_size": 128,
             "sq_size": 72,
             "fetch_width": 6,
@@ -150,7 +153,7 @@ def write_config_file(output_file: str,
 
     "LLC": {{
         "frequency": 4000,
-        "sets": 16384,
+        "sets": {2048*num_cores},
         "ways": 16,
         "rq_size": 32,
         "wq_size": 32,
@@ -169,10 +172,10 @@ def write_config_file(output_file: str,
     "physical_memory": {{
         "dram_type": 4800,
         "frequency": 2400,
-        "address_mapping": "pzen",
+        "address_mapping": "p{address_mapping}",
         "rq_size": 64,
         "wq_size": {dram_write_buffer_size},
-        "channels": 2,
+        "channels": {num_channels},
         "bankgroups": 8,
         "banks": 4,
         "rows": 65336,
@@ -189,20 +192,26 @@ def write_config_file(output_file: str,
     wr.close()
 
 # Baseline:
-write_config_file('baseline_close', 'lru', 48)
-write_config_file('baseline_close_srrip', 'srrip', 48)
-write_config_file('baseline_close_ship', 'ship', 48)
+write_config_file('baseline', 'lru')
+write_config_file('baseline_srrip', 'srrip')
 
 # BARD:
-write_config_file('bard_close', 'bard_lru', 48)
-write_config_file('bard_close_srrip', 'bard_srrip', 48)
-write_config_file('bard_close_ship', 'bard_ship', 48)
+write_config_file('bard', 'bard_lru')
+write_config_file('bard_srrip', 'bard_srrip')
 
 # VWQ:
-write_config_file('vwq_clopen', 'vwq_lru', 48)
+write_config_file('vwq', 'vwq_lru')
+
+# EAGER:
+write_config_file('eager_writeback', 'eager_lru')
 
 # Sensitivity:
-for dram_write_buffer_size in [32, 64, 96]:
-    write_config_file(f'baseline_close_wb{dram_write_buffer_size}', 'lru', dram_write_buffer_size)
-    write_config_file(f'bard_close_wb{dram_write_buffer_size}', 'bard_lru', dram_write_buffer_size)
+for dram_write_buffer_size in [32, 64, 96, 128]:
+    write_config_file(f'baseline_wb{dram_write_buffer_size}', 'lru', dram_write_buffer_size)
+    write_config_file(f'bard_wb{dram_write_buffer_size}', 'bard_lru', dram_write_buffer_size)
 
+write_config_file('baseline_mop4', 'lru', address_mapping='mop4')
+write_config_file('bard_mop4', 'bard_lru', address_mapping='mop4')
+
+write_config_file('baseline_16c', 'lru', num_cores=16, num_channels=4)
+write_config_file('bard_16c', 'bard_lru', num_cores=16, num_channels=4)

@@ -155,7 +155,6 @@ def collect_stats(build: str, output_file: str):
         wr.write('\n')
     wr.close() 
 
-build = argv[1]
-output_file = argv[2]
-
-collect_stats(build, output_file)
+builds = [f for f in os.listdir('out') if os.path.isdir(f'out/{f}')]
+for b in builds:
+    collect_stats(b, f'data/{b}.csv')

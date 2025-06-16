@@ -39,9 +39,9 @@ DRAM_ADDRESS_MAPPER::DRAM_ADDRESS_MAPPER(
 
     if (mapping_name.find("mop") != std::string::npos)
     {
-        size_t mop_width = std::stoi(mapping_name.substr(3));
+        size_t mop_size = std::stoi(mapping_name.substr(3));
         
-        ch_offset = mop_width;
+        ch_offset = ilog2(mop_size);
         bg_offset = ch_offset + ch_width;
         ba_offset = bg_offset + bg_width;
         row_offset = ch_width + bg_width + ba_width + column_width;
