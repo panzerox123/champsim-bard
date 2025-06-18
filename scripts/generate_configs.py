@@ -5,7 +5,7 @@ CONFIG_FOLDER_PATH = 'json'
 def write_config_file(output_file: str,
                       llc_repl: str,
                       dram_write_buffer_size=48,
-                      address_mapping='pzen',
+                      address_mapping='zen',
                       num_cores=8,
                       num_channels=2
 ):

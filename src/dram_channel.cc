@@ -145,6 +145,40 @@ DRAM_CHANNEL::find_ready_request()
         }
     }
 
+    // we failed to schedule a command that advances an request
+    if (out.first.type == DRAM_COMMAND::TYPE::INVALID)
+    {
+        // If we are using a timeout open page policy, use this time to schedule precharges for any open rows
+        if (opt_dram_page_policy == DRAM_PAGE_POLICY::TIMEOUT_OPEN_PAGE)
+        {
+            for (size_t b_idx = 0; b_idx < banks.size(); b_idx++)
+            {
+                auto& b = banks[b_idx];
+
+                // If the bank has a pending row hit or there is no open row, skip
+                if (b.active_request.has_value() || banks_with_row_hits[b_idx] || !b.state.open_row.has_value())
+                    continue;
+                
+                if (current_time >= b.state.row_open_until && current_time >= b.state.pre_ok)
+                {
+                    // Because of the way I've written the scheduling code ( sry :( )
+                    // we need to simulate the precharge here. So `out` will
+                    // still remain invalid.
+
+                    b.state.open_row.reset();  // close the row
+                    b.state.next_cas_is_row_hit = false;
+                    
+                    // Do timing update for `act_ok`
+                    b.state.act_ok = std::max(b.state.act_ok, current_time+dram_timing.tRP);
+
+                    ++sim_stats.precharges;
+
+                    break;
+                }
+            }
+        }
+    }
+
     return out;
 }
 
@@ -216,6 +250,12 @@ DRAM_CHANNEL::schedule_ready_request()
             update(b.state.pre_ok, is_read ? dram_timing.tRTP 
                                            : (dram_timing.CWL + dram_timing.burst + dram_timing.tWR));
             b.state.next_cas_is_row_hit = true;
+
+            if (opt_dram_page_policy == DRAM_PAGE_POLICY::TIMEOUT_OPEN_PAGE)
+            {
+                // keep the row open for 100ns
+                b.state.row_open_until = current_time + champsim::chrono::clock::duration{100*1000};
+            }
         }
     }
     else if (cmd.type == DRAM_COMMAND::TYPE::ACTIVATE)
@@ -574,7 +614,7 @@ DRAM_CHANNEL::print_deadlock()
 bool
 DRAM_CHANNEL::do_autopre(const DRAM_COMMAND& cmd)
 {
-    if (opt_dram_page_policy == DRAM_PAGE_POLICY::OPEN)
+    if (opt_dram_page_policy == DRAM_PAGE_POLICY::OPEN || opt_dram_page_policy == DRAM_PAGE_POLICY::TIMEOUT_OPEN_PAGE)
     {
         return false;
     }

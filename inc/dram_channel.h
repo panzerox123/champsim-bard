@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-enum class DRAM_PAGE_POLICY { OPEN =0, CLOSE =1, SOFT_CLOSE =2, OPEN_WRITES_ONLY =3 };
+enum class DRAM_PAGE_POLICY { OPEN =0, CLOSE =1, SOFT_CLOSE =2, OPEN_WRITES_ONLY =3, TIMEOUT_OPEN_PAGE =4 };
 
 struct DRAM_COMMAND
 {
@@ -42,6 +42,9 @@ struct DRAM_BANK_STATE
     champsim::chrono::clock::time_point pre_ok{};
     champsim::chrono::clock::time_point read_ok{};
     champsim::chrono::clock::time_point write_ok{};
+
+    // Only used for timeout open page (open for 100ns)
+    champsim::chrono::clock::time_point row_open_until{};
 
     bool next_cas_is_row_hit =false;
 };
