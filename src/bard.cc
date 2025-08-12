@@ -307,14 +307,14 @@ BARD::is_sampled_set(long _set) const
 int
 BARD::get_max_eviction_pos()
 {
-    if (opt_bard_max_lookup >= 0)
-    {
-        return opt_bard_max_lookup;
-    }
-    else if (opt_bard_use_utility_counters)
+    if (opt_bard_use_utility_counters)
     {
         load_umon.update_max_lookup(pos_sort_descending, 3);
         return load_umon.max_lookup;
+    }
+    else if (opt_bard_max_lookup >= 0)
+    {
+        return opt_bard_max_lookup;
     }
     else
     {
@@ -325,14 +325,14 @@ BARD::get_max_eviction_pos()
 int
 BARD::get_max_eager_pos()
 {
-    if (opt_bard_max_lookup >= 0)
-    {
-        return opt_bard_max_lookup;
-    }
-    else if (opt_bard_use_utility_counters)
+    if (opt_bard_use_utility_counters)
     {
         write_umon.update_max_lookup(pos_sort_descending, 2);
         return write_umon.max_lookup;
+    }
+    else if (opt_bard_max_lookup >= 0)
+    {
+        return opt_bard_max_lookup;
     }
     else
     {

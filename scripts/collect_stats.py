@@ -157,4 +157,5 @@ def collect_stats(build: str, output_file: str):
 
 builds = [f for f in os.listdir('out') if os.path.isdir(f'out/{f}')]
 for b in builds:
+    print(f'======================================{b}===================================')
     collect_stats(b, f'data/{b}.csv')
