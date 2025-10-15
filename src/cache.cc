@@ -213,50 +213,8 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
             return false;
         }
 
-        // Perform virtual write queue writebacks (check random sets for writebacks because we are using a page-permutation based address mapping):
-        if (dram != nullptr && opt_cache_enable_vwq)
-        {
-            size_t match_bank = dram->address_mapper.bank_idx(way->address);
-            size_t match_row = dram->address_mapper.row(way->address);
-            for (size_t tries = 0; tries < 64; tries++)
-            {
-                size_t vwq_set_id = std::rand() % NUM_SET;
-                auto vwq_set_begin = std::next(block.begin(), vwq_set_id*NUM_WAY);
-                auto vwq_set_end = std::next(vwq_set_begin, NUM_WAY);
-
-                if (vwq_set_begin == set_begin)
-                    continue;
-                
-                auto it = std::find_if(vwq_set_begin, vwq_set_end,
-                                [match_bank, match_row, this]
-                                (const auto& e)
-                                {
-                                    return e.valid && e.dirty && e.vwq_can_use
-                                            && this->dram->address_mapper.bank_idx(e.address) == match_bank
-                                            && this->dram->address_mapper.row(e.address) == match_row;
-                                });
-
-                if (it != vwq_set_end)
-                {
-                    // Try to enqueue:
-                    request_type vwq_packet;
-                    vwq_packet.cpu = fill_mshr.cpu;
-                    vwq_packet.address = it->address;
-                    vwq_packet.data = it->data;
-                    vwq_packet.instr_id = fill_mshr.instr_id;
-                    vwq_packet.ip = champsim::address{};
-                    vwq_packet.type = access_type::WRITE;
-                    vwq_packet.pf_metadata = it->pf_metadata;
-                    vwq_packet.response_requested = false;
-                    
-                    bool success = lower_level->add_wq(vwq_packet);
-                    if (success)
-                        it->dirty = false;
-                    else
-                        break;
-                }
-            }
-        }
+        // Perform virtual write queue writebacks
+        do_vwq_writeback(fill_mshr, set_begin, way);
     }
 
     champsim::address evicting_address{};
@@ -272,22 +230,16 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
     if (way != set_end)
     {
         if (way->valid && way->prefetch)
-        {
             ++sim_stats.pf_useless;
-        }
 
         if (fill_mshr.type == access_type::PREFETCH)
-        {
             ++sim_stats.pf_fill;
-        }
 
         *way = fill_block(fill_mshr, metadata_thru);
 
         // Do eager writeback
-        if (dram != nullptr && opt_cache_enable_eager_writeback)
-        {
+        if (dram != nullptr && OPT_CACHE_ENABLE_EAGER_WRITEBACK)
             do_eager_writeback(set_begin, set_end, fill_mshr.cpu, fill_mshr.instr_id);
-        }
     }
 
     // COLLECT STATS
@@ -345,7 +297,7 @@ bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
             way->prefetch = false;
         }
 
-        if (dram != nullptr && opt_cache_enable_eager_writeback)
+        if (dram != nullptr && OPT_CACHE_ENABLE_EAGER_WRITEBACK)
         {
             do_eager_writeback(set_begin, set_end, handle_pkt.cpu, handle_pkt.instr_id);
         }
@@ -1002,7 +954,7 @@ void CACHE::print_deadlock()
 void
 CACHE::do_eager_writeback(set_type::iterator set_begin, set_type::iterator set_end, int cpu, int instr_id)
 {
-    auto it = std::find_if(set_begin, set_end, 
+    auto it = std::find_if(set_begin, set_end,
                         [] (const auto& e) { return e.valid && e.dirty && e.vwq_can_use; });
     if (it != set_end)
     {
@@ -1016,9 +968,58 @@ CACHE::do_eager_writeback(set_type::iterator set_begin, set_type::iterator set_e
         eager_packet.type = access_type::WRITE;
         eager_packet.pf_metadata = it->pf_metadata;
         eager_packet.response_requested = false;
-        
+
         bool success = lower_level->add_wq(eager_packet);
         if (success)
             it->dirty = false;
+    }
+}
+
+void
+CACHE::do_vwq_writeback(const mshr_type& fill_mshr, set_type::iterator set_begin, set_type::iterator way)
+{
+    // Perform virtual write queue writebacks (check random sets for writebacks because we are using a page-permutation based address mapping):
+    if (dram != nullptr && OPT_CACHE_ENABLE_VWQ)
+    {
+        size_t match_bank = dram->address_mapper.bank_idx(way->address);
+        size_t match_row = dram->address_mapper.row(way->address);
+        for (size_t tries = 0; tries < 64; tries++)
+        {
+            size_t vwq_set_id = std::rand() % NUM_SET;
+            auto vwq_set_begin = std::next(block.begin(), vwq_set_id*NUM_WAY);
+            auto vwq_set_end = std::next(vwq_set_begin, NUM_WAY);
+
+            if (vwq_set_begin == set_begin)
+                continue;
+
+            auto it = std::find_if(vwq_set_begin, vwq_set_end,
+                            [match_bank, match_row, this]
+                            (const auto& e)
+                            {
+                                return e.valid && e.dirty && e.vwq_can_use
+                                        && this->dram->address_mapper.bank_idx(e.address) == match_bank
+                                        && this->dram->address_mapper.row(e.address) == match_row;
+                            });
+
+            if (it != vwq_set_end)
+            {
+                // Try to enqueue:
+                request_type vwq_packet;
+                vwq_packet.cpu = fill_mshr.cpu;
+                vwq_packet.address = it->address;
+                vwq_packet.data = it->data;
+                vwq_packet.instr_id = fill_mshr.instr_id;
+                vwq_packet.ip = champsim::address{};
+                vwq_packet.type = access_type::WRITE;
+                vwq_packet.pf_metadata = it->pf_metadata;
+                vwq_packet.response_requested = false;
+
+                bool success = lower_level->add_wq(vwq_packet);
+                if (success)
+                    it->dirty = false;
+                else
+                    break;
+            }
+        }
     }
 }

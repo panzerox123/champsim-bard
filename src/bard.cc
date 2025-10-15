@@ -74,7 +74,7 @@ BARD::print_update_msg()
     {
         fmt::print("num evicts: {}, p: {}, s: {} \t max proactive lookup: {}, max shadow lookup: {}\n", s_total_evicts, s_non_lru_evicts, s_eager_writebacks, get_max_eviction_pos(), get_max_eager_pos());
 
-        if (opt_bard_use_utility_counters)
+        if (OPT_BARD_USE_UTILITY_COUNTERS)
         {
             fmt::print("current cycle = {}, last update cycle = {}, delta = {}\n",
                     cache->current_cycle(), last_update_cycle, cache->current_cycle() - last_update_cycle);
@@ -105,9 +105,9 @@ BARD::print_update_msg()
 void
 BARD::initialize()
 {
-    set_modulus = NUM_SET / opt_bard_sampled_sets;
+    set_modulus = NUM_SET / OPT_BARD_SAMPLED_SETS;
     ilog2_set_modulus = ilog2(set_modulus);
-    fmt::print("initializing BARD -- num sampled sets: {}, modulus = {}\n", opt_bard_sampled_sets, set_modulus);
+    fmt::print("initializing BARD -- num sampled sets: {}, modulus = {}\n", OPT_BARD_SAMPLED_SETS, set_modulus);
 }
 
 void
@@ -190,7 +190,7 @@ BARD::handle_writeback(long set, champsim::address address)
     ba_bits[bank_idx] = true;
 
     bool all_done;
-    if (opt_bard_use_bitvector)
+    if (OPT_BARD_USE_BITVECTOR)
         all_done = std::all_of(ba_bits.begin(), ba_bits.end(), [] (bool x) { return x; });
     else
         all_done = std::all_of(bg_ctrs.begin(), bg_ctrs.end(), [m=address_mapper.banks] (auto x) { return x >= m; });
@@ -225,7 +225,7 @@ BARD::handle_hit_miss(long set, long way, position_type pos, bool is_write, bool
 long
 BARD::find_victim(long initial_victim_way, long set, pos_iterator pos_begin, pos_iterator pos_end, const champsim::cache_block* current_set)
 {
-    if (is_sampled_set(set) || opt_bard_only_shadow_writeback) 
+    if (is_sampled_set(set) || OPT_BARD_ONLY_SHADOW_WRITEBACK)
         return initial_victim_way;
 
     update_utility_monitors();
@@ -248,7 +248,7 @@ BARD::find_victim(long initial_victim_way, long set, pos_iterator pos_begin, pos
             set_victim_data(victim, initial_victim_way, current_set);
 
             bool ok;
-            if (opt_bard_use_bitvector)
+            if (OPT_BARD_USE_BITVECTOR)
                 ok = !bank_write_bitvec[victim.channel][victim.bank_idx];
             else
                 ok = (bankgroup_write_counters[victim.channel][victim.bankgroup] < address_mapper.banks) && !bank_write_bitvec[victim.channel][victim.bank_idx];
@@ -275,7 +275,7 @@ BARD::find_victim(long initial_victim_way, long set, pos_iterator pos_begin, pos
 long
 BARD::find_eager_writeback(long set, pos_iterator pos_begin, pos_iterator pos_end, const champsim::cache_block* current_set)
 {
-    if (is_sampled_set(set) || opt_bard_only_proactive_writeback)
+    if (is_sampled_set(set) || OPT_BARD_ONLY_PROACTIVE_WRITEBACK)
         return -1;
 
     update_utility_monitors();
@@ -291,7 +291,7 @@ BARD::find_eager_writeback(long set, pos_iterator pos_begin, pos_iterator pos_en
 bool
 BARD::is_sampled_set(long _set) const
 {
-    if (opt_bard_max_lookup >= 0)
+    if (OPT_BARD_MAX_LOOKUP >= 0)
         return false;
 
     if (set_modulus == 0)
@@ -307,14 +307,14 @@ BARD::is_sampled_set(long _set) const
 int
 BARD::get_max_eviction_pos()
 {
-    if (opt_bard_use_utility_counters)
+    if (OPT_BARD_USE_UTILITY_COUNTERS)
     {
         load_umon.update_max_lookup(pos_sort_descending, 3);
         return load_umon.max_lookup;
     }
-    else if (opt_bard_max_lookup >= 0)
+    else if (OPT_BARD_MAX_LOOKUP >= 0)
     {
-        return opt_bard_max_lookup;
+        return OPT_BARD_MAX_LOOKUP;
     }
     else
     {
@@ -325,14 +325,14 @@ BARD::get_max_eviction_pos()
 int
 BARD::get_max_eager_pos()
 {
-    if (opt_bard_use_utility_counters)
+    if (OPT_BARD_USE_UTILITY_COUNTERS)
     {
         write_umon.update_max_lookup(pos_sort_descending, 2);
         return write_umon.max_lookup;
     }
-    else if (opt_bard_max_lookup >= 0)
+    else if (OPT_BARD_MAX_LOOKUP >= 0)
     {
-        return opt_bard_max_lookup;
+        return OPT_BARD_MAX_LOOKUP;
     }
     else
     {
@@ -371,7 +371,7 @@ BARD::select_dirty_line(pos_iterator pos_begin, pos_iterator pos_end, const long
 
         if ((pos_sort_descending && *it < max_lookup) || (!pos_sort_descending && *it >= max_lookup))
         {
-            if (opt_bard_use_bitvector)
+            if (OPT_BARD_USE_BITVECTOR)
                 cand.priority = !bank_write_bitvec[cand.channel][cand.bank_idx];
             else
                 cand.priority = (bankgroup_write_counters[cand.channel][cand.bankgroup] < address_mapper.banks) && !bank_write_bitvec[cand.channel][cand.bank_idx];

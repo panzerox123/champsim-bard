@@ -124,17 +124,17 @@ void cache_set_copy_way_contents_and_clean_source(const champsim::cache_block*, 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
 
-extern DRAM_PAGE_POLICY opt_dram_page_policy;
-extern bool             opt_bard_use_row_buffer_hits;
-extern bool             opt_bard_use_bitvector;
+extern DRAM_PAGE_POLICY OPT_DRAM_PAGE_POLICY;
+extern bool             OPT_BARD_USE_ROW_BUFFER_HITS;
+extern bool             OPT_BARD_USE_BITVECTOR;
 
-extern bool             opt_bard_only_proactive_writeback;
-extern bool             opt_bard_only_shadow_writeback;
+extern bool             OPT_BARD_ONLY_PROACTIVE_WRITEBACK;
+extern bool             OPT_BARD_ONLY_SHADOW_WRITEBACK;
 
-extern int              opt_bard_max_lookup;
-extern int              opt_bard_sampled_sets;
+extern int              OPT_BARD_MAX_LOOKUP;
+extern int              OPT_BARD_SAMPLED_SETS;
 
-extern bool             opt_bard_use_utility_counters;
+extern bool             OPT_BARD_USE_UTILITY_COUNTERS;
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////

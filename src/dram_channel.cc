@@ -149,7 +149,7 @@ DRAM_CHANNEL::find_ready_request()
     if (out.first.type == DRAM_COMMAND::TYPE::INVALID)
     {
         // If we are using a timeout open page policy, use this time to schedule precharges for any open rows
-        if (opt_dram_page_policy == DRAM_PAGE_POLICY::TIMEOUT_OPEN_PAGE)
+        if (OPT_DRAM_PAGE_POLICY == DRAM_PAGE_POLICY::TIMEOUT_OPEN_PAGE)
         {
             for (size_t b_idx = 0; b_idx < banks.size(); b_idx++)
             {
@@ -251,7 +251,7 @@ DRAM_CHANNEL::schedule_ready_request()
                                            : (dram_timing.CWL + dram_timing.burst + dram_timing.tWR));
             b.state.next_cas_is_row_hit = true;
 
-            if (opt_dram_page_policy == DRAM_PAGE_POLICY::TIMEOUT_OPEN_PAGE)
+            if (OPT_DRAM_PAGE_POLICY == DRAM_PAGE_POLICY::TIMEOUT_OPEN_PAGE)
             {
                 // keep the row open for 100ns
                 b.state.row_open_until = current_time + champsim::chrono::clock::duration{100*1000};
@@ -317,7 +317,7 @@ DRAM_CHANNEL::schedule_ready_request()
             else if (cmd.type == DRAM_COMMAND::TYPE::WRITE)
             {
                 update(bb.state.read_ok, same_bankgroup ? dram_timing.tCCD_L_WTR : dram_timing.tCCD_S_WTR);
-                if (opt_dram_use_x8_write_timing)
+                if (OPT_DRAM_USE_X8_WRITE_TIMING)
                     update(bb.state.write_ok, same_bankgroup ? dram_timing.tCCD_L_WR/2 : dram_timing.tCCD_S_WR);
                 else
                     update(bb.state.write_ok, same_bankgroup ? dram_timing.tCCD_L_WR : dram_timing.tCCD_S_WR);
@@ -434,7 +434,7 @@ DRAM_CHANNEL::check_write_collision()
                 w_it->value().forward_checked = true;
                 
                 // Set bank id directly:
-                if (opt_dram_ideal_wlp)
+                if (OPT_DRAM_IDEAL_WLP)
                 {
                     w_it->value().address = address_mapper.set_bank_idx_of_address(w_it->value().address, wlp_bank_ctr);
 
@@ -614,15 +614,15 @@ DRAM_CHANNEL::print_deadlock()
 bool
 DRAM_CHANNEL::do_autopre(const DRAM_COMMAND& cmd)
 {
-    if (opt_dram_page_policy == DRAM_PAGE_POLICY::OPEN || opt_dram_page_policy == DRAM_PAGE_POLICY::TIMEOUT_OPEN_PAGE)
+    if (OPT_DRAM_PAGE_POLICY == DRAM_PAGE_POLICY::OPEN || OPT_DRAM_PAGE_POLICY == DRAM_PAGE_POLICY::TIMEOUT_OPEN_PAGE)
     {
         return false;
     }
-    else if (opt_dram_page_policy == DRAM_PAGE_POLICY::CLOSE)
+    else if (OPT_DRAM_PAGE_POLICY == DRAM_PAGE_POLICY::CLOSE)
     {
         return true;
     }
-    else if (opt_dram_page_policy == DRAM_PAGE_POLICY::SOFT_CLOSE)
+    else if (OPT_DRAM_PAGE_POLICY == DRAM_PAGE_POLICY::SOFT_CLOSE)
     {
         auto& q = write_mode ? WQ : RQ;
 
@@ -640,7 +640,7 @@ DRAM_CHANNEL::do_autopre(const DRAM_COMMAND& cmd)
                                 });
         return no_row_hits;
     }
-    else if (opt_dram_page_policy == DRAM_PAGE_POLICY::OPEN_WRITES_ONLY)
+    else if (OPT_DRAM_PAGE_POLICY == DRAM_PAGE_POLICY::OPEN_WRITES_ONLY)
     {
         if (cmd.type == DRAM_COMMAND::TYPE::WRITE)
             return false;

@@ -146,8 +146,8 @@ private:
 /*
  * Command-line options:
  * */
-extern DRAM_PAGE_POLICY opt_dram_page_policy;
-extern bool             opt_dram_ideal_wlp;
-extern bool             opt_dram_use_x8_write_timing;
+extern DRAM_PAGE_POLICY OPT_DRAM_PAGE_POLICY;
+extern bool             OPT_DRAM_IDEAL_WLP;
+extern bool             OPT_DRAM_USE_X8_WRITE_TIMING;
 
 #endif   // DRAM_CHANNEL_h

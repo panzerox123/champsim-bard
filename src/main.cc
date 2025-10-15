@@ -44,23 +44,23 @@ std::vector<phase_stats> main(environment& env, std::vector<phase_info>& phases,
 /*
  * EXTERNAL OPTIONS:
  * */
-bool             opt_cache_enable_vwq;
-bool             opt_cache_enable_eager_writeback;
+bool             OPT_CACHE_ENABLE_VWQ;
+bool             OPT_CACHE_ENABLE_EAGER_WRITEBACK;
 
-DRAM_PAGE_POLICY opt_dram_page_policy;
-bool             opt_dram_ideal_wlp;
-bool             opt_dram_use_x8_write_timing;
+DRAM_PAGE_POLICY OPT_DRAM_PAGE_POLICY;
+bool             OPT_DRAM_IDEAL_WLP;
+bool             OPT_DRAM_USE_X8_WRITE_TIMING;
 
-bool opt_bard_use_row_buffer_hits;
-bool opt_bard_use_bitvector;
+bool OPT_BARD_USE_ROW_BUFFER_HITS;
+bool OPT_BARD_USE_BITVECTOR;
 
-bool opt_bard_only_proactive_writeback;
-bool opt_bard_only_shadow_writeback;
+bool OPT_BARD_ONLY_PROACTIVE_WRITEBACK;
+bool OPT_BARD_ONLY_SHADOW_WRITEBACK;
 
-int opt_bard_max_lookup;
-int opt_bard_sampled_sets;
+int OPT_BARD_MAX_LOOKUP;
+int OPT_BARD_SAMPLED_SETS;
 
-bool opt_bard_use_utility_counters;
+bool OPT_BARD_USE_UTILITY_COUNTERS;
 
 #ifndef CHAMPSIM_TEST_BUILD
 using configured_environment = champsim::configured::generated_environment<CHAMPSIM_BUILD>;
@@ -113,28 +113,28 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
    * */
   int dram_page_policy = 0;
 
-  app.add_flag("--cache-enable-vwq", opt_cache_enable_vwq, "enable VWQ for caches with a non-null DRAM ptr");
-  app.add_flag("--cache-enable-eager-writeback", opt_cache_enable_eager_writeback, "enable Eager Writeback for caches with a non-null DRAM ptr");
+  app.add_flag("--cache-enable-vwq", OPT_CACHE_ENABLE_VWQ, "enable VWQ for caches with a non-null DRAM ptr");
+  app.add_flag("--cache-enable-eager-writeback", OPT_CACHE_ENABLE_EAGER_WRITEBACK, "enable Eager Writeback for caches with a non-null DRAM ptr");
 
   app.add_option("--dram-page-policy", dram_page_policy, "0 = open, 1 = close, 2 = soft-close");
-  app.add_flag("--dram-ideal-wlp", opt_dram_ideal_wlp, "enable to ensure writes go to banks uniformly");
-  app.add_flag("--dram-use-x8-write-timing", opt_dram_use_x8_write_timing, "enable to set tCCD_L_WR = 10ns");
+  app.add_flag("--dram-ideal-wlp", OPT_DRAM_IDEAL_WLP, "enable to ensure writes go to banks uniformly");
+  app.add_flag("--dram-use-x8-write-timing", OPT_DRAM_USE_X8_WRITE_TIMING, "enable to set tCCD_L_WR = 10ns");
   /*
    * BARD OPTIONS;
    * */
-  opt_bard_max_lookup = -1;
-  opt_bard_sampled_sets = 64;
+  OPT_BARD_MAX_LOOKUP = -1;
+  OPT_BARD_SAMPLED_SETS = 64;
 
-  app.add_flag("--bard-use-row-buffer-hits", opt_bard_use_row_buffer_hits, "enable so BARD tries to maintain RBHR");
-  app.add_flag("--bard-use-bitvector", opt_bard_use_bitvector, "enable so BARD uses one bit per bank");
+  app.add_flag("--bard-use-row-buffer-hits", OPT_BARD_USE_ROW_BUFFER_HITS, "enable so BARD tries to maintain RBHR");
+  app.add_flag("--bard-use-bitvector", OPT_BARD_USE_BITVECTOR, "enable so BARD uses one bit per bank");
 
-  app.add_flag("--bard-only-proactive-writeback", opt_bard_only_proactive_writeback, "enable to disable BARD's shadow writeback");
-  app.add_flag("--bard-only-shadow-writeback", opt_bard_only_shadow_writeback, "enable to disable BARD's shadow writeback");
+  app.add_flag("--bard-only-proactive-writeback", OPT_BARD_ONLY_PROACTIVE_WRITEBACK, "enable to disable BARD's shadow writeback");
+  app.add_flag("--bard-only-shadow-writeback", OPT_BARD_ONLY_SHADOW_WRITEBACK, "enable to disable BARD's shadow writeback");
 
-  app.add_option("--bard-max-lookup", opt_bard_max_lookup, "max way lookup for bard (default = -1, which enables use mark-recapture)");
-  app.add_option("--bard-sampled-sets", opt_bard_sampled_sets, "sampled sets for bard (default = 64)");
+  app.add_option("--bard-max-lookup", OPT_BARD_MAX_LOOKUP, "max way lookup for bard (default = -1, which enables use mark-recapture)");
+  app.add_option("--bard-sampled-sets", OPT_BARD_SAMPLED_SETS, "sampled sets for bard (default = 64)");
 
-  app.add_flag("--bard-use-utility-counters", opt_bard_use_utility_counters, "set to use utility counters instead of mark recapture");
+  app.add_flag("--bard-use-utility-counters", OPT_BARD_USE_UTILITY_COUNTERS, "set to use utility counters instead of mark recapture");
 
   CLI11_PARSE(app, argc, argv);
 
@@ -158,7 +158,7 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
   /*
    * Additional setup:
    * */
-  opt_dram_page_policy = static_cast<DRAM_PAGE_POLICY>(dram_page_policy);
+  OPT_DRAM_PAGE_POLICY = static_cast<DRAM_PAGE_POLICY>(dram_page_policy);
 
   std::vector<champsim::tracereader> traces;
   std::transform(

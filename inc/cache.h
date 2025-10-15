@@ -147,6 +147,7 @@ private:
   std::pair<mshr_type, request_type> mshr_and_forward_packet(const tag_lookup_type& handle_pkt);
 
   void do_eager_writeback(set_type::iterator, set_type::iterator, int cpu, int instr_id);
+  void do_vwq_writeback(const mshr_type& fill_mshr, set_type::iterator set_begin, set_type::iterator way);
 
   std::deque<tag_lookup_type> internal_PQ{};
   std::deque<tag_lookup_type> inflight_tag_check{};
@@ -544,7 +545,7 @@ void CACHE::replacement_module_model<Rs...>::impl_replacement_final_stats()
 /*
  * Command-line options:
  * */
-extern bool opt_cache_enable_vwq;
-extern bool opt_cache_enable_eager_writeback;
+extern bool OPT_CACHE_ENABLE_VWQ;
+extern bool OPT_CACHE_ENABLE_EAGER_WRITEBACK;
 
 #endif
