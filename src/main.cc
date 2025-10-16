@@ -111,7 +111,7 @@ int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
   /*
    * BARD OPTIONS;
    * */
-  app.add_flag("--bard-mode", OPT_BARD_MODE, "0 = default, 1 = evicts only, 2 = cleansing only");
+  app.add_option("--bard-mode", OPT_BARD_MODE, "0 = default, 1 = evicts only, 2 = cleansing only");
 
   CLI11_PARSE(app, argc, argv);
 

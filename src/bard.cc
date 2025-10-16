@@ -6,7 +6,7 @@
 #include "bard.h"
 
 BARD::BARD(long sets, long ways, CACHE* _cache, bool _evict_lower_positions)
-    :bank_write_bitvec(cache->dram->num_channels, std::vector<bool>(cache->dram->num_bankgroups*cache->dram->num_banks, false)),
+    :bank_write_bitvec(_cache->dram->num_channels, std::vector<bool>(_cache->dram->num_bankgroups*_cache->dram->num_banks, false)),
     evict_lower_positions(_evict_lower_positions),
     cache(_cache),
     address_mapper(_cache->dram->address_mapper),
@@ -30,7 +30,7 @@ BARD::print_stats()
     fmt::print("BARD_TOTAL_EVICTS : {}\n", s_total_evicts);
     fmt::print("BARD_NON_LRU_EVICTS : {}\n", s_non_lru_evicts);
     fmt::print("BARD_EAGER_WRITEBACKS : {}\n", s_eager_writebacks);
-    fmt::print("BARD_REDUNDANT_WRITEBACKS : {\n", s_redundant_writebacks);
+    fmt::print("BARD_REDUNDANT_WRITEBACKS : {}\n", s_redundant_writebacks);
 }
 
 void
