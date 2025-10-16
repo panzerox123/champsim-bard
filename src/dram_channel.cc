@@ -426,23 +426,9 @@ DRAM_CHANNEL::check_write_collision()
                 found = std::find_if(std::next(w_it), WQ.end(), checker);
 
             if (found != WQ.end())
-            {
                 w_it->reset();
-            }
             else
-            {
                 w_it->value().forward_checked = true;
-                
-                // Set bank id directly:
-                if (OPT_DRAM_IDEAL_WLP)
-                {
-                    w_it->value().address = address_mapper.set_bank_idx_of_address(w_it->value().address, wlp_bank_ctr);
-
-                    ++wlp_bank_ctr;
-                    if (wlp_bank_ctr == num_bankgroups*num_banks)
-                        wlp_bank_ctr = 0;
-                }
-            }
         }
     }
 }
@@ -609,6 +595,22 @@ DRAM_CHANNEL::print_deadlock()
     size_t write_occu = std::count_if(WQ.begin(), WQ.end(), [] (const auto& e) { return e.has_value(); });
 
     fmt::print("\tREAD OCCU = {}, WRITE OCCU = {}\n", read_occu, write_occu);
+}
+
+bool
+DRAM_CHANNEL::does_bank_have_pending_write(size_t bank_idx) const
+{
+    auto it = std::find_if(WQ.begin(), WQ.end(), 
+                        [this, bank_idx] (const auto& e)
+                        {
+                            if (!e.has_value())
+                                return false;
+
+                            // compute bank_idx
+                            size_t bi = this->address_mapper.bank_idx(e->address);
+                            return bi == bank_idx;
+                        });
+    return it != WQ.end();
 }
 
 bool

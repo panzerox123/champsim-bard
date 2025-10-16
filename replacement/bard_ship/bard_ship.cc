@@ -13,7 +13,7 @@ bard_ship::bard_ship(CACHE* cache)
     NUM_WAY(cache->NUM_WAY),
     sampler(SAMPLER_SET_FACTOR * NUM_CPUS * static_cast<std::size_t>(NUM_WAY)),
     rrpv_values(static_cast<std::size_t>(NUM_SET * NUM_WAY), RRPV_MAX),
-    bard_impl(4, cache->NUM_SET, cache->NUM_WAY, cache, false)
+    bard_impl(cache->NUM_SET, cache->NUM_WAY, cache, false)
 {
     // randomly selected sampler sets
     std::generate_n(std::back_inserter(rand_sets), SAMPLER_SET_FACTOR * NUM_CPUS, std::knuth_b{1});
@@ -30,49 +30,22 @@ long bard_ship::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set
 {
     bard_impl.print_update_msg();
 
-    const int max_lookup = bard_impl.get_max_eviction_pos();
-
     auto begin = std::next(rrpv_values.begin(), set*NUM_WAY);
     auto end = std::next(begin, NUM_WAY);
 
-    if (bard_impl.is_sampled_set(set))
-    {
-        long rand_way = std::rand() % NUM_WAY;
-        auto rand_it = std::next(begin, rand_way);
-        int r = *rand_it;
-
-        bard_impl.handle_mark(set, rand_way, r, current_set[rand_way].dirty);
-    }
-
     auto v_it = std::max_element(begin, end);
-    if (max_lookup < 4 && *v_it < max_lookup)
-    {
-        // Compute delta from max lookup:
-        int d = max_lookup - *v_it;
-
-        // Increment all rrpvs by this much:
-        std::for_each(begin, end, [d] (auto& x) { x += d; });
-    }
-
     long victim_way = std::distance(begin, v_it);
 
-    // Check for an alternate candidate:
-    if (bard_impl.is_sampled_set(set))
+    // BARD -- check for an alternate candidate:
+    if (current_set[victim_way].dirty)
     {
-        bard_impl.handle_recapture(set, victim_way, BARD::RecaptureType::EVICT);
+        victim_way = bard_impl.find_victim(victim_way, set, begin, end, current_set);
     }
     else
     {
-        if (current_set[victim_way].dirty)
-        {
-            victim_way = bard_impl.find_victim(victim_way, set, begin, end, current_set);
-        }
-        else
-        {
-            long shadow_way = bard_impl.find_eager_writeback(set, begin, end, current_set);
-            if (shadow_way >= 0)
-                cache_set_copy_way_contents_and_clean_source(current_set, shadow_way, victim_way);
-        }
+        long shadow_way = bard_impl.find_eager_writeback(set, begin, end, current_set);
+        if (shadow_way >= 0)
+            cache_set_copy_way_contents_and_clean_source(current_set, shadow_way, victim_way);
     }
 
     // Increment RRPVs one final time
@@ -103,30 +76,13 @@ void bard_ship::update_replacement_state(uint32_t triggering_cpu, long set, long
     if (way == NUM_WAY)
         return;
 
-//  int initial_rrpv = bard_impl.is_sampled_set(set) ? next_rand_rrpv : bard_impl.get_max_eviction_pos()-1;
-//  initial_rrpv = std::clamp(initial_rrpv, RRPV_MIN, RRPV_MAX-1);
     int initial_rrpv = RRPV_MAX-1;
-
-    bard_impl.handle_hit_miss(set, way, get_rrpv(set,way), (access_type{type} == access_type::WRITE), !hit);
 
     // handle writeback access
     if (access_type{type} == access_type::WRITE)
     {
         if (!hit)
-        {
             get_rrpv(set, way) = initial_rrpv;
-
-            if (bard_impl.is_sampled_set(set))
-            {
-                ++next_rand_rrpv;
-                if (next_rand_rrpv > RRPV_MAX)
-                    next_rand_rrpv = RRPV_MIN;
-            }
-        }
-        else
-        {
-            bard_impl.handle_recapture(set, way, BARD::RecaptureType::WRITE_HIT);
-        }
 
         return;
     }
@@ -167,7 +123,6 @@ void bard_ship::update_replacement_state(uint32_t triggering_cpu, long set, long
     if (hit)
     {
         get_rrpv(set, way) = 0;
-        bard_impl.handle_recapture(set, way, BARD::RecaptureType::LOAD_HIT);
     }
     else
     {
@@ -175,18 +130,8 @@ void bard_ship::update_replacement_state(uint32_t triggering_cpu, long set, long
         auto SHCT_idx = ip.slice_lower<32_b>().to<std::size_t>() % SHCT_PRIME;
 
         if (SHCT[triggering_cpu][SHCT_idx].is_max())
-        {
             get_rrpv(set, way) = RRPV_MAX;
-        }
         else
-        {
             get_rrpv(set, way) = initial_rrpv;
-            if (bard_impl.is_sampled_set(set))
-            {
-                ++next_rand_rrpv;
-                if (next_rand_rrpv > RRPV_MAX)
-                    next_rand_rrpv = RRPV_MIN;
-            }
-        }
     }
 }

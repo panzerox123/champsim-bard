@@ -66,9 +66,9 @@
         "max_tag_check": 2,
         "max_fill": 2,
         "prefetch_as_load": false,
-        "virtual_prefetch": false,
+        "virtual_prefetch": true,
         "prefetch_activate": "LOAD,PREFETCH",
-        "prefetcher": "no"
+        "prefetcher": "berti"
     },
 
     "L2C": {
@@ -84,7 +84,7 @@
         "prefetch_as_load": false,
         "virtual_prefetch": false,
         "prefetch_activate": "LOAD,PREFETCH",
-        "prefetcher": "no"
+        "prefetcher": "spp_dev"
     },
 
     "ITLB": {
@@ -141,7 +141,7 @@
 
     "LLC": {
         "frequency": 4000,
-        "sets": 16384,
+        "sets": 96,
         "ways": 16,
         "rq_size": 32,
         "wq_size": 32,
@@ -162,7 +162,7 @@
         "frequency": 2400,
         "address_mapping": "pzen",
         "rq_size": 64,
-        "wq_size": 96,
+        "wq_size": 48,
         "channels": 2,
         "bankgroups": 8,
         "banks": 4,

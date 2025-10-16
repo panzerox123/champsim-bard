@@ -7,7 +7,7 @@ bard_lru::bard_lru(CACHE* cache) : bard_lru(cache, cache->NUM_SET, cache->NUM_WA
 
 bard_lru::bard_lru(CACHE* cache, long sets, long ways)
     :replacement(cache), 
-    bard_impl(ways, sets, ways, cache, true),
+    bard_impl(sets, ways, cache, true),
     NUM_WAY(ways),
     last_used_cycles(static_cast<std::size_t>(sets * ways), 0)
 {}
@@ -26,15 +26,6 @@ long bard_lru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set,
     auto begin = std::next(std::begin(last_used_cycles), set * NUM_WAY);
     auto end = std::next(begin, NUM_WAY);
 
-    if (bard_impl.is_sampled_set(set))
-    {
-        long rand_way = std::rand() % NUM_WAY;
-        auto rand_it = std::next(begin, rand_way);
-        int lru_pos = std::count_if(begin, end, [timestamp=*rand_it] (auto t) { return timestamp > t; });
-
-        bard_impl.handle_mark(set, rand_way, lru_pos, current_set[rand_way].dirty);
-    }
-
     // Find the way whose last use cycle is most distant
     auto victim = std::min_element(begin, end);
     assert(begin <= victim);
@@ -45,29 +36,22 @@ long bard_lru::find_victim(uint32_t triggering_cpu, uint64_t instr_id, long set,
     ++bard_impl.s_total_evicts;
 
     // Now, use BARD to determine if a different candidate should be selected
-    if (bard_impl.is_sampled_set(set))
+    std::vector<int> lru_pos_array(NUM_WAY);
+    std::transform(begin, end, lru_pos_array.begin(),
+            [begin,end] (auto t)
+            {
+                return std::count_if(begin, end, [t] (auto x) { return t > x; });
+            });
+
+    if (current_set[victim_way].dirty)
     {
-        bard_impl.handle_recapture(set, victim_way, BARD::RecaptureType::EVICT);
+        victim_way = bard_impl.find_victim(victim_way, set, lru_pos_array.begin(), lru_pos_array.end(), current_set);
     }
     else
     {
-        std::vector<int> lru_pos_array(NUM_WAY);
-        std::transform(begin, end, lru_pos_array.begin(),
-                [begin,end] (auto t)
-                {
-                    return std::count_if(begin, end, [t] (auto x) { return t > x; });
-                });
-
-        if (current_set[victim_way].dirty)
-        {
-            victim_way = bard_impl.find_victim(victim_way, set, lru_pos_array.begin(), lru_pos_array.end(), current_set);
-        }
-        else
-        {
-            long shadow_way = bard_impl.find_eager_writeback(set, lru_pos_array.begin(), lru_pos_array.end(), current_set);
-            if (shadow_way >= 0)
-                cache_set_copy_way_contents_and_clean_source(current_set, shadow_way, victim_way);
-        }
+        long shadow_way = bard_impl.find_eager_writeback(set, lru_pos_array.begin(), lru_pos_array.end(), current_set);
+        if (shadow_way >= 0)
+            cache_set_copy_way_contents_and_clean_source(current_set, shadow_way, victim_way);
     }
 
     if (current_set[victim_way].dirty)
@@ -86,28 +70,6 @@ void bard_lru::replacement_cache_fill(uint32_t triggering_cpu, long set, long wa
 void bard_lru::update_replacement_state(uint32_t triggering_cpu, long set, long way, champsim::address full_addr, champsim::address ip,
                                    champsim::address victim_addr, access_type type, uint8_t hit)
 {
-    // Update bard:
-    int pos = -1;
-    if (hit)
-    {
-        if (access_type{type} == access_type::WRITE)
-            bard_impl.handle_recapture(set, way, BARD::RecaptureType::WRITE_HIT);
-        else
-            bard_impl.handle_recapture(set, way, BARD::RecaptureType::LOAD_HIT);
-
-        // Compute LRU position
-        auto begin = std::next(last_used_cycles.begin(), set*NUM_WAY);
-        auto end = std::next(begin, NUM_WAY);
-        pos = std::count_if(begin, end, 
-                        [timestamp=last_used_cycles[set*NUM_WAY+way]] 
-                        (auto t)
-                        { 
-                            return timestamp > t;
-                        });
-    }
-
-    bard_impl.handle_hit_miss(set, way, pos, (access_type{type} == access_type::WRITE), !hit);
-
     // Mark the way as being used on the current cycle
     if (hit && access_type{type} != access_type::WRITE) // Skip this for writeback hits
         last_used_cycles.at((std::size_t)(set * NUM_WAY + way)) = cycle++;

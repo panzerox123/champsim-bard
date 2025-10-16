@@ -4,6 +4,7 @@ CONFIG_FOLDER_PATH = 'json'
 
 def write_config_file(output_file: str,
                       llc_repl: str,
+                      llc_sets=2048*8,
                       dram_write_buffer_size=48,
                       address_mapping='zen',
                       num_cores=8,
@@ -78,9 +79,9 @@ def write_config_file(output_file: str,
         "max_tag_check": 2,
         "max_fill": 2,
         "prefetch_as_load": false,
-        "virtual_prefetch": false,
+        "virtual_prefetch": true,
         "prefetch_activate": "LOAD,PREFETCH",
-        "prefetcher": "no"
+        "prefetcher": "berti"
     }},
 
     "L2C": {{
@@ -96,7 +97,7 @@ def write_config_file(output_file: str,
         "prefetch_as_load": false,
         "virtual_prefetch": false,
         "prefetch_activate": "LOAD,PREFETCH",
-        "prefetcher": "no"
+        "prefetcher": "spp_dev"
     }},
 
     "ITLB": {{
@@ -153,7 +154,7 @@ def write_config_file(output_file: str,
 
     "LLC": {{
         "frequency": 4000,
-        "sets": {2048*num_cores},
+        "sets": {llc_sets},
         "ways": 16,
         "rq_size": 32,
         "wq_size": 32,
@@ -191,13 +192,18 @@ def write_config_file(output_file: str,
 }}''')
     wr.close()
 
+# Baseline -- for weighted speedup only:
+write_config_file('baseline_single_core', 'lru', num_cores=1)
+
 # Baseline:
 write_config_file('baseline', 'lru')
 write_config_file('baseline_srrip', 'srrip')
+write_config_file('baseline_ship', 'ship')
 
 # BARD:
 write_config_file('bard', 'bard_lru')
 write_config_file('bard_srrip', 'bard_srrip')
+write_config_file('bard_ship', 'bard_ship')
 
 # VWQ:
 write_config_file('vwq', 'vwq_lru')
@@ -210,8 +216,5 @@ for dram_write_buffer_size in [32, 64, 96, 128]:
     write_config_file(f'baseline_wb{dram_write_buffer_size}', 'lru', dram_write_buffer_size)
     write_config_file(f'bard_wb{dram_write_buffer_size}', 'bard_lru', dram_write_buffer_size)
 
-write_config_file('baseline_mop4', 'lru', address_mapping='mop4')
-write_config_file('bard_mop4', 'bard_lru', address_mapping='mop4')
-
-write_config_file('baseline_16c', 'lru', num_cores=16, num_channels=4)
-write_config_file('bard_16c', 'bard_lru', num_cores=16, num_channels=4)
+write_config_file('baseline_16c', 'lru', num_cores=16, num_channels=4, llc_sets=2048*16)
+write_config_file('bard_16c', 'bard_lru', num_cores=16, num_channels=4, llc_sets=2048*16)
