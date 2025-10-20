@@ -1,12 +1,23 @@
-'''
-    author: Suhas Vittal
+''' author: Suhas Vittal
 '''
 
 from sys import argv
 from collections import defaultdict
 import os
 
-SUITES = ['spec2017', 'ligra', 'stream', 'google']
+SUITES = ['spec2017', 'ligra', 'stream', 'google', 'mixes']
+SINGLE_CORE_IPC = {}  # need to initialize
+
+mix_list = {
+    'mix0': ['cam4', 'omnetpp', 'mis', 'cf', 'merced', 'delta', 'whiskey', 'lbm'],
+    'mix1': ['pagerank', 'bc', 'wrf', 'roms', 'radii', 'bellmanford', 'triangle', 'fotonik3d'],
+    'mix2': ['bwaves', 'pagerankdelta', 'charlie', 'roms', 'whiskey', 'bc', 'triangle', 'delta'],
+    'mix3': ['omnetpp', 'pagerankdelta', 'bwaves', 'cf', 'pagerank', 'bellmanford', 'mis', 'radii'],
+    'mix4': ['wrf', 'merced', 'fotonik3d', 'lbm', 'cam4', 'charlie', 'radii', 'bc'],
+    'mix5': ['lbm', 'roms', 'fotonik3d', 'wrf', 'pagerankdelta', 'delta', 'triangle', 'bwaves']
+}
+
+### FUNCTIONS:
 
 def read_stat_from_line(line: str, start_string: str, end_string: str):
     left = line.find(start_string) + len(start_string)
@@ -17,6 +28,10 @@ def read_stat_from_line(line: str, start_string: str, end_string: str):
     return line[left:right]
 
 def collect_stats(build: str, output_file: str):
+    core_count = 8
+    if '16c' in build:
+        core_count = 16
+
     wr = open(output_file, 'w')
     wr.write('Workload,IPC,MPKI,WPKI,Write-Read-Ratio,Write RBHR,Write BLP,Write BGLP,Write Mode Fraction,Ideal Write Mode Fraction,Ideal Speedup,Write Latency,Total Evictions,PW Evictions,SW Evictions\n')
 
@@ -124,16 +139,34 @@ def collect_stats(build: str, output_file: str):
                 # Either the line is EOF or is at BARD stats:
                 while line != '':
                     if 'BARD' in line:
-                        pw_evicts = int(read_stat_from_line(line, 'NON LRU EVICTS:', 'TOTAL EVICTS'))
-                        total_evicts = int(read_stat_from_line(line, 'TOTAL EVICTS:', 'EAGER WB:'))
-                        sw_evicts = int(read_stat_from_line(line, 'EAGER WB:', None))
+                        total_evicts = int(read_stat_from_line(line, 'BARD_TOTAL_EVICTS :', None))
+
+                        line = rd.readline()
+                        bard_e_evicts = int(read_stat_from_line(line, 'BARD_NON_LRU_EVICTS :', None))
+
+                        line = rd.readline()
+                        bard_c_cleanses = int(read_stat_from_line(line, 'BARD_EAGER_WRITEBACKS :', None))
+
+                        line = rd.readline()
+                        bard_redundant_wb = int(read_stat_from_line(line, 'BARD_REDUNDANT_WRITEBACKS :', None))
+
+                        line = rd.readline()
+                        bard_sync_msg = int(read_stat_from_line(line, 'BARD SYNC MESSAGES :', None))
                         break
                     else:
-                        pw_evicts, total_evicts, sw_evicts = 0, 0, 0
+                        total_evicts, bard_e_evicts, bard_c_cleanses, bard_redundant_wb, bard_sync_msg = 0,0,0,0,0
                     line = rd.readline()
 
             # Write stats to csv file:
-            ipc = len(cpu_stats) / sum(1.0/cpu_stats[cpuid]['ipc'] for cpuid in cpu_stats)
+            if suite == 'mixes':
+                # get workload list and normalize against single core baseline
+                workload_list = mix_list[name]
+                d = core_count//2
+                ipc_list = [SINGLE_CORE_IPC[workload_list[cpuid//d]] for cpuid in cpu_stats]
+                denom_list = [cpu_stats[cpuid]['ipc']/ipc_list[cpuid] for cpuid in cpu_stats]
+                ipc = len(cpu_stats) / sum(1.0/x for x in denom_list)
+            else:
+                ipc = len(cpu_stats) / sum(1.0/cpu_stats[cpuid]['ipc'] for cpuid in cpu_stats)
             mpki = len(cpu_stats) / sum(1.0/cpu_stats[cpuid]['mpki'] for cpuid in cpu_stats)
             wpki = dram_stats['wpki']
             write_read_ratio = dram_stats['write_requests'] / dram_stats['read_requests']
@@ -142,20 +175,66 @@ def collect_stats(build: str, output_file: str):
             write_bglp = dram_stats['write_bglp']
 
             total_execution_time = cpu_stats[0]['cycles'] * 250
-            write_mode_time = dram_stats['write_mode_time']
-            write_latency = 2*write_mode_time / dram_stats['write_requests']
-            ideal_write_mode_time = dram_stats['write_mode_time'] - ((write_latency-3300)*dram_stats['write_requests']*0.5)
-            ideal_execution_time = total_execution_time - (write_mode_time-ideal_write_mode_time)
+            if dram_stats['write_requests'] == 0:
+                write_mode_time, write_latency, ideal_write_mode_time, ideal_execution_time = 1,1,1,1
+            else:
+                write_mode_time = dram_stats['write_mode_time']
+                write_latency = 2*write_mode_time / dram_stats['write_requests']
+                ideal_write_mode_time = dram_stats['write_mode_time'] - ((write_latency-3300)*dram_stats['write_requests']*0.5)
+                ideal_execution_time = total_execution_time - (write_mode_time-ideal_write_mode_time)
 
             write_time_fraction = write_mode_time/total_execution_time
             ideal_write_time_fraction = ideal_write_mode_time/ideal_execution_time
             ideal_speedup = total_execution_time / ideal_execution_time
 
-            wr.write(f'{name},{ipc},{mpki},{wpki},{write_read_ratio},{write_rbhr},{write_blp},{write_bglp},{write_time_fraction},{ideal_write_time_fraction},{ideal_speedup},{write_latency},{total_evicts},{pw_evicts},{sw_evicts}\n')
+            wr.write(f'{name},{ipc},{mpki},{wpki},{write_read_ratio},{write_rbhr},{write_blp},{write_bglp}')
+            wr.write(f',{write_time_fraction},{ideal_write_time_fraction},{ideal_speedup},{write_latency}')
+            wr.write(f',{total_evicts},{bard_e_evicts},{bard_c_cleanses},{bard_redundant_wb},{bard_sync_msg}\n')
         wr.write('\n')
     wr.close() 
 
+# initialize single core ipc:
+for suite in SUITES:
+    if suite == 'mixes':
+        continue
+    data_folder = f'out/baseline_single_core/{suite}'
+
+    for f in os.listdir(data_folder):
+        if not f.endswith('out'):
+            continue
+        name = f[:f.find('.out')]
+        data_file = f'{data_folder}/{f}'
+
+        # only care about IPC:
+        cpu_stats = defaultdict(dict)
+
+        with open(data_file, 'r') as rd:
+            # Skip lines until we reach RoI stats
+            line = rd.readline().strip()
+            while line != 'Region of Interest Statistics':
+                line = rd.readline().strip()
+
+            while 'MSHR_MERGE' not in line:
+                # Get IPC per core:
+                if 'CPU' in line and 'IPC' in line: 
+                    cpuid = int(read_stat_from_line(line, 'CPU', 'cumulative'))
+                    ipc = float(read_stat_from_line(line, 'IPC:', 'instructions'))
+                    inst = int(read_stat_from_line(line, 'instructions:', 'cycles'))
+                    cycles = int(read_stat_from_line(line, 'cycles:', None))
+
+                    cpu_stats[cpuid]['ipc'] = ipc
+                    cpu_stats[cpuid]['inst'] = inst
+                    cpu_stats[cpuid]['cycles'] = cycles
+                line = rd.readline().strip()
+            
+            single_core_ipc = cpu_stats[0]['ipc']
+            SINGLE_CORE_IPC[name] = single_core_ipc
+
+# create output csvs:
+
 builds = [f for f in os.listdir('out') if os.path.isdir(f'out/{f}')]
 for b in builds:
+    if b == 'baseline_single_core':
+        continue
     print(f'======================================{b}===================================')
     collect_stats(b, f'data/{b}.csv')

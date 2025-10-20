@@ -31,6 +31,7 @@ BARD::print_stats()
     fmt::print("BARD_NON_LRU_EVICTS : {}\n", s_non_lru_evicts);
     fmt::print("BARD_EAGER_WRITEBACKS : {}\n", s_eager_writebacks);
     fmt::print("BARD_REDUNDANT_WRITEBACKS : {}\n", s_redundant_writebacks);
+    fmt::print("BARD SYNC MESSAGES : {}\n", s_sync_messages);
 }
 
 void
