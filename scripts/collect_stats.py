@@ -33,7 +33,7 @@ def collect_stats(build: str, output_file: str):
         core_count = 16
 
     wr = open(output_file, 'w')
-    wr.write('Workload,IPC,MPKI,WPKI,Write-Read-Ratio,Write RBHR,Write BLP,Write BGLP,Write Mode Fraction,Ideal Write Mode Fraction,Ideal Speedup,Write Latency,Total Evictions,PW Evictions,SW Evictions\n')
+    wr.write('Workload,IPC,MPKI,WPKI,Write-Read-Ratio,Write RBHR,Write BLP,Write BGLP,Write Mode Fraction,Ideal Write Mode Fraction,Ideal Speedup,Write Latency,Total Evictions,BARD E Evictions,BARD C Cleanses,BARD Redundant Writebacs,BARD Sync Messages\n')
 
     for suite in SUITES:
         data_folder = f'out/{build}/{suite}'
