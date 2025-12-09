@@ -33,7 +33,10 @@ def collect_stats(build: str, output_file: str):
         core_count = 16
 
     wr = open(output_file, 'w')
-    wr.write('Workload,IPC,MPKI,WPKI,Write-Read-Ratio,Write RBHR,Write BLP,Write BGLP,Write Mode Fraction,Ideal Write Mode Fraction,Ideal Speedup,Write Latency,Total Evictions,BARD E Evictions,BARD C Cleanses,BARD Redundant Writebacs,BARD Sync Messages\n')
+    wr.write('Workload,IPC,MPKI,WPKI,Write-Read-Ratio,Total Cycles,Write RBHR,Write BLP,Write BGLP')
+    wr.write(',Write Mode Fraction,Ideal Write Mode Fraction,Ideal Speedup,Read Latency,Write Latency')
+    wr.write(',Total Evictions,BARD E Evictions,BARD C Cleanses,BARD Redundant Writebacs,BARD Sync Messages')
+    wr.write(',Read Requests,Write Requests,Activates,Precharges\n')
 
     for suite in SUITES:
         data_folder = f'out/{build}/{suite}'
@@ -82,10 +85,11 @@ def collect_stats(build: str, output_file: str):
                     line = rd.readline().strip()
                     
                 # Get number of reads and writes:
-                dram_read_reqs, dram_write_reqs = 0, 0
+                dram_read_reqs, dram_write_reqs, dram_acts, dram_pre = 0, 0, 0, 0
                 dram_write_rbhr = []
                 dram_blp = []
                 dram_bglp = []
+                dram_read_latency = []
                 dram_write_time = []
                 for i in range(2):
                     while f'Channel {i}' not in line:
@@ -104,6 +108,8 @@ def collect_stats(build: str, output_file: str):
                     write_hits = int(read_stat_from_line(line, 'WRITE HITS:', None))
 
                     line = rd.readline()   # act and pre
+                    acts = int(read_stat_from_line(line, 'ACTIVATES:', 'PRECHARGES'))
+                    pre = int(read_stat_from_line(line, 'PRECHARGES:', None))
                     line = rd.readline()   # queue full
                     line = rd.readline()   # write drains
                     line = rd.readline()   # write imbalance
@@ -114,7 +120,9 @@ def collect_stats(build: str, output_file: str):
                     blp = float(read_stat_from_line(line, 'MEAN BLP:', 'BGLP'))
                     bglp = float(read_stat_from_line(line, 'BGLP:', None))
 
-                    line = rd.readline()# Read latency
+                    # Read latency
+                    line = rd.readline()
+                    read_latency = float(read_stat_from_line(line, 'READ LATENCY:', None))
 
                     # Write mode time
                     line = rd.readline()
@@ -123,17 +131,23 @@ def collect_stats(build: str, output_file: str):
                     # update dram stats:
                     dram_read_reqs += read_reqs
                     dram_write_reqs += write_reqs
+                    dram_acts += acts
+                    dram_pre += pre
                     dram_write_rbhr.append(0 if write_cmds == 0 else write_hits/write_cmds)
                     dram_blp.append(blp)
                     dram_bglp.append(bglp)
+                    dram_read_latency.append(read_latency)
                     dram_write_time.append(write_mode_time)
 
                 dram_stats['read_requests'] = dram_read_reqs
                 dram_stats['write_requests'] = dram_write_reqs
+                dram_stats['acts'] = dram_acts
+                dram_stats['pre'] = dram_pre
                 dram_stats['write_rbhr'] = sum(dram_write_rbhr) / len(dram_write_rbhr)
                 dram_stats['write_blp'] = sum(dram_blp) / len(dram_blp)
                 dram_stats['write_bglp'] = sum(dram_bglp) / len(dram_bglp)
                 dram_stats['wpki'] = (dram_write_reqs*1000) / sum(cpu_stats[c]['inst'] for c in cpu_stats)
+                dram_stats['read_latency'] = sum(dram_read_latency) / len(dram_read_latency)
                 dram_stats['write_mode_time'] = sum(dram_write_time) / len(dram_write_time)
 
                 # Either the line is EOF or is at BARD stats:
@@ -174,22 +188,30 @@ def collect_stats(build: str, output_file: str):
             write_blp = dram_stats['write_blp']
             write_bglp = dram_stats['write_bglp']
 
-            total_execution_time = cpu_stats[0]['cycles'] * 250
-            if dram_stats['write_requests'] == 0:
-                write_mode_time, write_latency, ideal_write_mode_time, ideal_execution_time = 1,1,1,1
-            else:
-                write_mode_time = dram_stats['write_mode_time']
-                write_latency = 2*write_mode_time / dram_stats['write_requests']
-                ideal_write_mode_time = dram_stats['write_mode_time'] - ((write_latency-3300)*dram_stats['write_requests']*0.5)
-                ideal_execution_time = total_execution_time - (write_mode_time-ideal_write_mode_time)
+            reads = dram_stats['read_requests']
+            writes = dram_stats['write_requests']
+            acts = dram_stats['acts']
+            pre = dram_stats['pre']
+
+            total_cycles = max(cpu_stats[cpuid]['cycles'] for cpuid in cpu_stats)
+            total_execution_time = total_cycles * 250
+            
+            read_latency = dram_stats['read_latency']
+
+            write_mode_time = dram_stats['write_mode_time']
+            write_latency = 2*write_mode_time / dram_stats['write_requests']
+            ideal_write_mode_time = dram_stats['write_mode_time'] - ((write_latency-3300)*dram_stats['write_requests']*0.5)
+            ideal_execution_time = total_execution_time - (write_mode_time-ideal_write_mode_time)
 
             write_time_fraction = write_mode_time/total_execution_time
             ideal_write_time_fraction = ideal_write_mode_time/ideal_execution_time
             ideal_speedup = total_execution_time / ideal_execution_time
 
-            wr.write(f'{name},{ipc},{mpki},{wpki},{write_read_ratio},{write_rbhr},{write_blp},{write_bglp}')
-            wr.write(f',{write_time_fraction},{ideal_write_time_fraction},{ideal_speedup},{write_latency}')
-            wr.write(f',{total_evicts},{bard_e_evicts},{bard_c_cleanses},{bard_redundant_wb},{bard_sync_msg}\n')
+            wr.write(f'{name},{ipc},{mpki},{wpki},{write_read_ratio},{total_cycles},{write_rbhr},{write_blp},{write_bglp}')
+            wr.write(f',{write_time_fraction},{ideal_write_time_fraction},{ideal_speedup},{read_latency},{write_latency}')
+            wr.write(f',{total_evicts},{bard_e_evicts},{bard_c_cleanses},{bard_redundant_wb},{bard_sync_msg}')
+            wr.write(f',{reads},{writes},{acts},{pre}')
+            wr.write('\n')
         wr.write('\n')
     wr.close() 
 
