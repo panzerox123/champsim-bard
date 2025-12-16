@@ -213,8 +213,8 @@ write_config_file('eager_writeback', 'eager_lru')
 
 # Sensitivity:
 for dram_write_buffer_size in [32, 64, 96, 128]:
-    write_config_file(f'baseline_wb{dram_write_buffer_size}', 'lru', dram_write_buffer_size)
-    write_config_file(f'bard_wb{dram_write_buffer_size}', 'bard_lru', dram_write_buffer_size)
+    write_config_file(f'baseline_wb{dram_write_buffer_size}', 'lru', dram_write_buffer_size=dram_write_buffer_size)
+    write_config_file(f'bard_wb{dram_write_buffer_size}', 'bard_lru', dram_write_buffer_size=dram_write_buffer_size)
 
 write_config_file('baseline_16c', 'lru', num_cores=16, num_channels=4, llc_sets=2048*16)
 write_config_file('bard_16c', 'bard_lru', num_cores=16, num_channels=4, llc_sets=2048*16)
