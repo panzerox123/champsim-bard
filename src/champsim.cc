@@ -142,7 +142,7 @@ phase_stats do_phase(const phase_info& phase, environment& env, std::vector<trac
       // Phase complete
       next_phase_complete[cpu.cpu] = next_phase_complete[cpu.cpu] || (cpu.sim_instr() >= length);
 
-      if (next_phase_complete[cpu.cpu] && is_warmup && !is_halt)
+      if (next_phase_complete[cpu.cpu] && is_warmup && !cpu.halt)
       {
         cpu.halt = true;
         fmt::print("{} halting CPU {} @ instruction {} cycle {} for remainder of phase\n", phase_name, cpu.cpu, cpu.sim_instr(), cpu.sim_cycle());
