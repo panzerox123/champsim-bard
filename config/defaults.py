@@ -22,7 +22,7 @@ def cache_core_defaults(cpu):
     yield { 'name': cpu.get('L1D'), 'lower_level': cpu.get('L2C') }
     yield { 'name': cpu.get('ITLB'), 'lower_level': cpu.get('STLB') }
     yield { 'name': cpu.get('DTLB'), 'lower_level': cpu.get('STLB') }
-    yield { 'name': cpu.get('L2C'), 'lower_level': 'LLC' }
+    yield { 'name': cpu.get('L2C'), 'lower_level': cpu.get('L3C') or 'LLC' }
     yield { 'name': cpu.get('STLB'), 'lower_level': cpu.get('PTW') }
 
 def ptw_core_defaults(cpu):
@@ -40,12 +40,14 @@ def list_defaults_for_core(cpu, caches):
         { '_first_level': True, '_is_instruction_cache': True,
          '_defaults': 'champsim::defaults::default_l1i', '_queue_factor': 32 },
         { '_defaults': 'champsim::defaults::default_l2c', '_queue_factor': 16 },
+        { '_defaults': 'champsim::defaults::default_llc', '_queue_factor': 32 },
         { '_defaults': 'champsim::defaults::default_llc', '_queue_factor': 32 }
     )
 
     l1d_members = (
         { '_first_level': True, '_defaults': 'champsim::defaults::default_l1d', '_queue_factor': 32 },
         { '_defaults': 'champsim::defaults::default_l2c', '_queue_factor': 16 },
+        { '_defaults': 'champsim::defaults::default_llc', '_queue_factor': 32 },
         { '_defaults': 'champsim::defaults::default_llc', '_queue_factor': 32 }
     )
 
