@@ -340,7 +340,7 @@ def get_instantiation_lines(cores, caches, ptws, pmem, vmem, build_id):
     # Need LLC data for DRAM address mapping:
     llc_sets = -1
     for c in caches:
-        if c['name'] == 'LLC':
+        if 'LLC' in c['name']:
             llc_sets = int(c['sets'])
             break
 
