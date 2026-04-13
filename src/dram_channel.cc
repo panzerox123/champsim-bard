@@ -15,7 +15,7 @@ DRAM_CHANNEL::request_type::request_type(const typename champsim::channel::reque
   asid[1] = req.asid[1];
 }
 
-//#define DRAM_ENABLE_LOGGER
+#define DRAM_ENABLE_LOGGER
 
 DRAM_CHANNEL::DRAM_CHANNEL(
         champsim::chrono::picoseconds mc_period,
@@ -26,7 +26,8 @@ DRAM_CHANNEL::DRAM_CHANNEL(
         std::size_t _num_banks,
         std::size_t _num_rows,
         const DRAM_ADDRESS_MAPPER& am,
-        const DRAM_TIMING& timing)
+        const DRAM_TIMING& timing,
+        bool _baws)
     :champsim::operable(mc_period),
     RQ(rq_size),
     WQ(wq_size),
@@ -37,11 +38,17 @@ DRAM_CHANNEL::DRAM_CHANNEL(
     num_banks(_num_banks),
     num_rows(_num_rows),
     channel_id(_channel_id),
+    baws(_baws),
     address_mapper(am),
     dram_timing(timing),
     writes_per_bank(_num_bankgroups*_num_banks, 0),
     writes_per_bankgroup(_num_bankgroups, 0)
 {
+    std::cout << "Channel" << channel_id << " BAWS Enabled: " << baws << "\n";
+    for(int i = 0; i < num_bankgroups; i++)
+    {
+        bankgroup_scheduled_to.push_back(false);
+    }
 #if defined(DRAM_ENABLE_LOGGER)
     logger = std::ofstream("dram_channel." + std::to_string(channel_id) + ".log");
 #endif
@@ -51,6 +58,14 @@ DRAM_CHANNEL::cmd_output_type
 DRAM_CHANNEL::find_ready_request()
 {
     cmd_output_type out;
+
+    // Track CAS picks within a memory-cycle so we do not issue two READ/WRITE
+    // commands to the same bankgroup at the same time.
+    if (baws && last_ref_cycle != current_time)
+    {
+        std::fill(bankgroup_scheduled_to.begin(), bankgroup_scheduled_to.end(), false);
+        last_ref_cycle = current_time;
+    }
 
     // First check active buffer for any issuable commands:
     for (const auto& b : banks)
@@ -62,6 +77,13 @@ DRAM_CHANNEL::find_ready_request()
         auto& [is_read, req_it] = b.active_request.value();
         if ((is_read && current_time >= b.state.read_ok) || (!is_read && current_time >= b.state.write_ok))
         {
+            size_t bg = address_mapper.bankgroup(req_it->value().address);
+            if (baws && bankgroup_scheduled_to[bg])
+            {
+                ++bankgroup_conflict;
+                continue;
+            }
+
             DRAM_COMMAND::TYPE cmd_type = is_read ? DRAM_COMMAND::TYPE::READ : DRAM_COMMAND::TYPE::WRITE;
             DRAM_COMMAND ready_cmd{req_it->value().address, cmd_type};
             ready_cmd.autopre = do_autopre(ready_cmd);
@@ -75,7 +97,14 @@ DRAM_CHANNEL::find_ready_request()
     }
 
     if (out.first.type != DRAM_COMMAND::TYPE::INVALID)
+    {
+        if (baws)
+        {
+            size_t bg = address_mapper.bankgroup(out.first.address);
+            bankgroup_scheduled_to[bg] = true;
+        }
         return out;
+    }
 
     // If nothing could be done, schedule reads and writes:
     auto& q = write_mode ? WQ : RQ;
@@ -108,6 +137,7 @@ DRAM_CHANNEL::find_ready_request()
 
         size_t b_idx = address_mapper.bank_idx(req.address);
         const auto& b = banks.at(b_idx);
+        size_t bg = address_mapper.bankgroup(req.address);
 
         DRAM_COMMAND ready_cmd{};
         ready_cmd.address = req.address;
@@ -121,9 +151,27 @@ DRAM_CHANNEL::find_ready_request()
             if (b.state.open_row.value() == address_mapper.row(req.address))
             {
                 if (write_mode && current_time >= b.state.write_ok)
-                    ready_cmd.type = DRAM_COMMAND::TYPE::WRITE;
+                {
+                    if (!baws || !bankgroup_scheduled_to[bg])
+                    {
+                        ready_cmd.type = DRAM_COMMAND::TYPE::WRITE;
+                    }
+                    else if (baws)
+                    {
+                        ++bankgroup_conflict;
+                    }
+                }
                 else if (!write_mode && current_time >= b.state.read_ok)
-                    ready_cmd.type = DRAM_COMMAND::TYPE::READ;
+                {
+                    if (!baws || !bankgroup_scheduled_to[bg])
+                    {
+                        ready_cmd.type = DRAM_COMMAND::TYPE::READ;
+                    }
+                    else if (baws)
+                    {
+                        ++bankgroup_conflict;
+                    }
+                }
             }
             else if (!banks_with_row_hits[b_idx] && current_time >= b.state.pre_ok)
             {
@@ -143,6 +191,12 @@ DRAM_CHANNEL::find_ready_request()
 
             out = cmd_output_type{ready_cmd, it};
         }
+    }
+
+    if (baws && (out.first.type == DRAM_COMMAND::TYPE::READ || out.first.type == DRAM_COMMAND::TYPE::WRITE))
+    {
+        size_t bg = address_mapper.bankgroup(out.first.address);
+        bankgroup_scheduled_to[bg] = true;
     }
 
     // we failed to schedule a command that advances an request
@@ -354,6 +408,7 @@ DRAM_CHANNEL::schedule_ready_request()
     logger << "\n";
 
     last_cas_command_time = current_time;
+    logger << "Bankgroup Conflicts: " << bankgroup_conflict << std::endl; 
 #endif
 
     return progress;

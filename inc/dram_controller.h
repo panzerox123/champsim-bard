@@ -36,7 +36,7 @@ public:
                         std::string dram_type, std::string address_mapping_name,
                         std::size_t rq_size, std::size_t wq_size,
                         std::size_t num_channels, std::size_t num_bankgroups, std::size_t num_banks, std::size_t num_rows, std::size_t num_columns,
-                        std::size_t llc_sets);
+                        std::size_t llc_sets, bool baws);
 
     void initialize() final;
     long operate() final;

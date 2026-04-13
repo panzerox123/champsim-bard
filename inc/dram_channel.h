@@ -104,9 +104,13 @@ struct DRAM_CHANNEL final : public champsim::operable
     const size_t num_rows;
 
     const size_t channel_id;
+    const bool baws;
 private:
     DRAM_ADDRESS_MAPPER address_mapper;
     DRAM_TIMING         dram_timing;
+
+    size_t bankgroup_conflict = 0; // 6x
+    std::vector<bool> bankgroup_scheduled_to;
 
     bool write_drain_started_with_no_read_occu;
     size_t writes_during_drain =0;
@@ -120,7 +124,7 @@ public:
     DRAM_CHANNEL(champsim::chrono::picoseconds mc_period,
                 std::size_t rq_size, std::size_t wq_size,
                 std::size_t channel_id, std::size_t num_bankgroups, std::size_t num_banks, std::size_t num_rows,
-                const DRAM_ADDRESS_MAPPER&, const DRAM_TIMING&);
+                const DRAM_ADDRESS_MAPPER&, const DRAM_TIMING&, bool baws);
 
     cmd_output_type find_ready_request(void);
     long schedule_ready_request(void);
