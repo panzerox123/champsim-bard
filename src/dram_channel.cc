@@ -15,7 +15,7 @@ DRAM_CHANNEL::request_type::request_type(const typename champsim::channel::reque
   asid[1] = req.asid[1];
 }
 
-#define DRAM_ENABLE_LOGGER
+//#define DRAM_ENABLE_LOGGER
 
 DRAM_CHANNEL::DRAM_CHANNEL(
         champsim::chrono::picoseconds mc_period,
