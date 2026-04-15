@@ -15,7 +15,7 @@ DRAM_CHANNEL::request_type::request_type(const typename champsim::channel::reque
   asid[1] = req.asid[1];
 }
 
-//#define DRAM_ENABLE_LOGGER
+#define DRAM_ENABLE_LOGGER
 
 DRAM_CHANNEL::DRAM_CHANNEL(
         champsim::chrono::picoseconds mc_period,
@@ -45,10 +45,7 @@ DRAM_CHANNEL::DRAM_CHANNEL(
     writes_per_bankgroup(_num_bankgroups, 0)
 {
     std::cout << "Channel" << channel_id << " BAWS Enabled: " << baws << "\n";
-    for(int i = 0; i < num_bankgroups; i++)
-    {
-        bankgroup_scheduled_to.push_back(false);
-    }
+    bank_scheduled_to.resize(num_bankgroups * num_banks, false);
 #if defined(DRAM_ENABLE_LOGGER)
     logger = std::ofstream("dram_channel." + std::to_string(channel_id) + ".log");
 #endif
@@ -58,14 +55,6 @@ DRAM_CHANNEL::cmd_output_type
 DRAM_CHANNEL::find_ready_request()
 {
     cmd_output_type out;
-
-    // Track CAS picks within a memory-cycle so we do not issue two READ/WRITE
-    // commands to the same bankgroup at the same time.
-    if (baws && last_ref_cycle != current_time)
-    {
-        std::fill(bankgroup_scheduled_to.begin(), bankgroup_scheduled_to.end(), false);
-        last_ref_cycle = current_time;
-    }
 
     // First check active buffer for any issuable commands:
     for (const auto& b : banks)
@@ -77,13 +66,6 @@ DRAM_CHANNEL::find_ready_request()
         auto& [is_read, req_it] = b.active_request.value();
         if ((is_read && current_time >= b.state.read_ok) || (!is_read && current_time >= b.state.write_ok))
         {
-            size_t bg = address_mapper.bankgroup(req_it->value().address);
-            if (baws && bankgroup_scheduled_to[bg])
-            {
-                ++bankgroup_conflict;
-                continue;
-            }
-
             DRAM_COMMAND::TYPE cmd_type = is_read ? DRAM_COMMAND::TYPE::READ : DRAM_COMMAND::TYPE::WRITE;
             DRAM_COMMAND ready_cmd{req_it->value().address, cmd_type};
             ready_cmd.autopre = do_autopre(ready_cmd);
@@ -97,17 +79,38 @@ DRAM_CHANNEL::find_ready_request()
     }
 
     if (out.first.type != DRAM_COMMAND::TYPE::INVALID)
-    {
-        if (baws)
-        {
-            size_t bg = address_mapper.bankgroup(out.first.address);
-            bankgroup_scheduled_to[bg] = true;
-        }
         return out;
-    }
 
     // If nothing could be done, schedule reads and writes:
     auto& q = write_mode ? WQ : RQ;
+
+    // Compute per-cycle WQ snapshot (occupancy, bank and bankgroup parallelism)
+    // while in write mode so we can measure the state of the WQ across the drain.
+    if (write_mode)
+    {
+        std::vector<bool> banks_seen(num_bankgroups * num_banks, false);
+        std::vector<bool> bankgroups_seen(num_bankgroups, false);
+        size_t wq_pending = 0;
+
+        for (const auto& entry : WQ)
+        {
+            if (!entry.has_value() || entry.value().scheduled)
+                continue;
+            ++wq_pending;
+            size_t b_idx = address_mapper.bank_idx(entry.value().address);
+            size_t bg    = address_mapper.bankgroup(entry.value().address);
+            banks_seen[b_idx]    = true;
+            bankgroups_seen[bg]  = true;
+        }
+
+        size_t banks_active = std::count(banks_seen.begin(), banks_seen.end(), true);
+        size_t bgs_active   = std::count(bankgroups_seen.begin(), bankgroups_seen.end(), true);
+
+        ++sim_stats.wq_drain_cycles;
+        sim_stats.wq_tot_requests          += wq_pending;
+        sim_stats.wq_tot_bank_parallelism  += banks_active;
+        sim_stats.wq_tot_bankgroup_parallelism += bgs_active;
+    }
 
     std::vector<bool> banks_with_row_hits(num_bankgroups*num_banks, false);
     for (auto it = q.begin(); it != q.end(); it++)
@@ -137,7 +140,6 @@ DRAM_CHANNEL::find_ready_request()
 
         size_t b_idx = address_mapper.bank_idx(req.address);
         const auto& b = banks.at(b_idx);
-        size_t bg = address_mapper.bankgroup(req.address);
 
         DRAM_COMMAND ready_cmd{};
         ready_cmd.address = req.address;
@@ -151,27 +153,9 @@ DRAM_CHANNEL::find_ready_request()
             if (b.state.open_row.value() == address_mapper.row(req.address))
             {
                 if (write_mode && current_time >= b.state.write_ok)
-                {
-                    if (!baws || !bankgroup_scheduled_to[bg])
-                    {
-                        ready_cmd.type = DRAM_COMMAND::TYPE::WRITE;
-                    }
-                    else if (baws)
-                    {
-                        ++bankgroup_conflict;
-                    }
-                }
+                    ready_cmd.type = DRAM_COMMAND::TYPE::WRITE;
                 else if (!write_mode && current_time >= b.state.read_ok)
-                {
-                    if (!baws || !bankgroup_scheduled_to[bg])
-                    {
-                        ready_cmd.type = DRAM_COMMAND::TYPE::READ;
-                    }
-                    else if (baws)
-                    {
-                        ++bankgroup_conflict;
-                    }
-                }
+                    ready_cmd.type = DRAM_COMMAND::TYPE::READ;
             }
             else if (!banks_with_row_hits[b_idx] && current_time >= b.state.pre_ok)
             {
@@ -191,12 +175,6 @@ DRAM_CHANNEL::find_ready_request()
 
             out = cmd_output_type{ready_cmd, it};
         }
-    }
-
-    if (baws && (out.first.type == DRAM_COMMAND::TYPE::READ || out.first.type == DRAM_COMMAND::TYPE::WRITE))
-    {
-        size_t bg = address_mapper.bankgroup(out.first.address);
-        bankgroup_scheduled_to[bg] = true;
     }
 
     // we failed to schedule a command that advances an request
@@ -574,6 +552,19 @@ DRAM_CHANNEL::update_read_write_priority()
             size_t bankgroups_with_writes = std::count_if(writes_per_bankgroup.begin(), writes_per_bankgroup.end(), [] (auto x) { return x != 0; });
             sim_stats.tot_bankgroup_parallelism += bankgroups_with_writes;
         }
+
+#if defined(DRAM_ENABLE_LOGGER)
+        {
+            double cycles = static_cast<double>(sim_stats.wq_drain_cycles ? sim_stats.wq_drain_cycles : 1);
+            logger << "[WRITE->READ] drain #" << sim_stats.num_write_drains
+                   << "\twrites=" << writes_during_drain
+                   << "\tduration=" << write_time / 1000 << " ns"
+                   << "\tavg_wq_requests="    << sim_stats.wq_tot_requests          / cycles
+                   << "\tavg_wq_banks="       << sim_stats.wq_tot_bank_parallelism  / cycles
+                   << "\tavg_wq_bankgroups="  << sim_stats.wq_tot_bankgroup_parallelism / cycles
+                   << "\n";
+        }
+#endif
     }
     else if (!write_mode && ((read_occu == 0 && write_occu > 0) || write_occu >= high_watermark))
     {
@@ -587,6 +578,12 @@ DRAM_CHANNEL::update_read_write_priority()
 
         std::fill(writes_per_bank.begin(), writes_per_bank.end(), 0);
         std::fill(writes_per_bankgroup.begin(), writes_per_bankgroup.end(), 0);
+
+        // Reset WQ snapshot accumulators for the new drain period
+        sim_stats.wq_drain_cycles              = 0;
+        sim_stats.wq_tot_requests              = 0;
+        sim_stats.wq_tot_bank_parallelism      = 0;
+        sim_stats.wq_tot_bankgroup_parallelism = 0;
     }
 }
 

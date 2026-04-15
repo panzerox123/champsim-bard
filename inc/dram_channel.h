@@ -110,7 +110,7 @@ private:
     DRAM_TIMING         dram_timing;
 
     size_t bankgroup_conflict = 0; // 6x
-    std::vector<bool> bankgroup_scheduled_to;
+    std::vector<bool> bank_scheduled_to;
 
     bool write_drain_started_with_no_read_occu;
     size_t writes_during_drain =0;

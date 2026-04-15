@@ -4,14 +4,13 @@
     "page_size": 2097152,
     "heartbeat_frequency": 10000000,
     "num_cores": 8,
-
     "ooo_cpu": [
         {
             "frequency": 4000,
-            "ifetch_buffer_size":64,
-            "decode_buffer_size":32,
-            "dispatch_buffer_size":32,
-            "register_file_size":128,
+            "ifetch_buffer_size": 64,
+            "decode_buffer_size": 32,
+            "dispatch_buffer_size": 32,
+            "register_file_size": 128,
             "rob_size": 512,
             "lq_size": 128,
             "sq_size": 72,
@@ -32,13 +31,11 @@
             "btb": "basic_btb"
         }
     ],
-
     "DIB": {
         "window_size": 16,
         "sets": 32,
         "ways": 8
     },
-
     "L1I": {
         "sets": 64,
         "ways": 8,
@@ -54,7 +51,6 @@
         "prefetch_activate": "LOAD,PREFETCH",
         "prefetcher": "no"
     },
-
     "L1D": {
         "sets": 64,
         "ways": 12,
@@ -70,7 +66,6 @@
         "prefetch_activate": "LOAD,PREFETCH",
         "prefetcher": "berti"
     },
-
     "L2C": {
         "sets": 1024,
         "ways": 8,
@@ -86,7 +81,6 @@
         "prefetch_activate": "LOAD,PREFETCH",
         "prefetcher": "spp_dev"
     },
-
     "ITLB": {
         "sets": 16,
         "ways": 4,
@@ -99,7 +93,6 @@
         "max_fill": 2,
         "prefetch_as_load": false
     },
-
     "DTLB": {
         "sets": 16,
         "ways": 4,
@@ -112,7 +105,6 @@
         "max_fill": 2,
         "prefetch_as_load": false
     },
-
     "STLB": {
         "sets": 1024,
         "ways": 12,
@@ -125,20 +117,18 @@
         "max_fill": 1,
         "prefetch_as_load": false
     },
-
-	"PTW": {
-		"pscl4_set": 1,
-		"pscl4_way": 2,
-		"pscl3_set": 1,
-		"pscl3_way": 4,
-		"pscl2_set": 2,
-		"pscl2_way": 4,
-		"rq_size": 16,
-		"mshr_size": 5,
-		"max_read": 2,
-		"max_write": 2
-	},
-
+    "PTW": {
+        "pscl4_set": 1,
+        "pscl4_way": 2,
+        "pscl3_set": 1,
+        "pscl3_way": 4,
+        "pscl2_set": 2,
+        "pscl2_way": 4,
+        "rq_size": 16,
+        "mshr_size": 5,
+        "max_read": 2,
+        "max_write": 2
+    },
     "LLC": {
         "frequency": 4000,
         "sets": 16384,
@@ -156,7 +146,6 @@
         "prefetcher": "no",
         "replacement": "lru"
     },
-
     "physical_memory": {
         "dram_type": 4800,
         "frequency": 2400,
@@ -170,7 +159,6 @@
         "columns": 128,
         "baws": true
     },
-
     "virtual_memory": {
         "pte_page_size": 4096,
         "num_levels": 4,

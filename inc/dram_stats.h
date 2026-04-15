@@ -33,6 +33,12 @@ struct dram_stats
     uint32_t tot_bank_parallelism =0;
     uint32_t tot_bankgroup_parallelism = 0;
 
+    // Per-cycle WQ snapshots accumulated across a write drain
+    uint64_t wq_drain_cycles =0;           // number of cycles sampled
+    uint64_t wq_tot_requests =0;           // sum of WQ occupancy across sampled cycles
+    uint64_t wq_tot_bank_parallelism =0;   // sum of distinct banks with pending WQ entries
+    uint64_t wq_tot_bankgroup_parallelism =0; // sum of distinct bankgroups with pending WQ entries
+
     uint64_t tot_read_occu_pre_drain =0;
     uint64_t tot_read_occu_post_drain =0;
 
