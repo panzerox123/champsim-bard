@@ -556,7 +556,7 @@ DRAM_CHANNEL::update_read_write_priority()
 #if defined(DRAM_ENABLE_LOGGER)
         {
             double cycles = static_cast<double>(sim_stats.wq_drain_cycles ? sim_stats.wq_drain_cycles : 1);
-            logger << "[WRITE->READ] drain #" << sim_stats.num_write_drains
+            std::cout << "[WRITE->READ] drain #" << sim_stats.num_write_drains
                    << "\twrites=" << writes_during_drain
                    << "\tduration=" << write_time / 1000 << " ns"
                    << "\tavg_wq_requests="    << sim_stats.wq_tot_requests          / cycles
