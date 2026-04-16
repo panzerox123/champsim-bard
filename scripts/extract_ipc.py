@@ -16,7 +16,6 @@ def extract_ipcs(filepath):
     ipcs = {}
     in_roi = False
     # Matches the format found under ROI Statistics:
-    # CPU 7 cumulative IPC: 0.4837 instructions: 100000001 cycles: 206746230
     pattern = re.compile(r"CPU (\d+) cumulative IPC: ([0-9.]+)")
     
     try:
@@ -42,6 +41,7 @@ def main():
     parser = argparse.ArgumentParser(description="Extract IPCs and calculate geomeans from ChampSim output files.")
     parser.add_argument("--dir", default="out", help="Base directory for output files (default: out)")
     parser.add_argument("--configs", nargs="+", help="List of configuration folder names to focus on (e.g. private_llc_per_core)")
+    parser.add_argument("--baseline", default="baseline", help="Baseline algorithm configuration folder name (default: baseline)")
     parser.add_argument("--output", help="File to write the results to")
     
     args = parser.parse_args()
@@ -50,14 +50,10 @@ def main():
         print(f"Error: Directory {args.dir} not found.")
         return
 
-    output_lines = []
-    header = f"{'Run Configuration':<40} | {'Workload':<20} | {'Geomean IPC':<12} | {'Cores'}"
-    separator = "-" * 105
-    
-    output_lines.append(header)
-    output_lines.append(separator)
+    # Data structure: data[workload_path][run_name] = geomean_ipc
+    data = {}
+    configs_found = set()
 
-    # Walk through the directory
     for root, dirs, files in os.walk(args.dir):
         rel_path = os.path.relpath(root, args.dir)
         path_parts = rel_path.split(os.sep)
@@ -80,11 +76,56 @@ def main():
                 if ipcs_dict:
                     ipc_list = list(ipcs_dict.values())
                     gm_ipc = calculate_geomean(ipc_list)
-                    num_cores = len(ipc_list)
                     
                     workload_path = os.path.join(*path_parts[1:], file) if len(path_parts) > 1 else file
-                    line = f"{run_name:<40} | {workload_path:<20} | {gm_ipc:<12.4f} | {num_cores} cores"
-                    output_lines.append(line)
+                    
+                    if workload_path not in data:
+                        data[workload_path] = {}
+                    data[workload_path][run_name] = gm_ipc
+                    configs_found.add(run_name)
+
+    if not data:
+        print("No data found.")
+        return
+
+    configs = sorted(list(configs_found))
+    if args.baseline in configs:
+        configs.remove(args.baseline)
+        configs.insert(0, args.baseline)
+    
+    output_lines = []
+    header = f"{'Trace':<30} | {'Algorithm':<40} | {'IPC':<10} | {'Speedup'}"
+    output_lines.append(header)
+    output_lines.append("-" * 95)
+    
+    speedups = {c: [] for c in configs}
+
+    for wkld in sorted(data.keys()):
+        base_ipc = data[wkld].get(args.baseline)
+        
+        for alg in configs:
+            if alg in data[wkld]:
+                ipc = data[wkld][alg]
+                speedup = (ipc / base_ipc) if base_ipc else 0
+                if base_ipc and alg != args.baseline:
+                    speedups[alg].append(speedup)
+                
+                speedup_str = f"{speedup:.4f}" if base_ipc else "N/A"
+                if alg == args.baseline:
+                    speedup_str = "1.0000 (base)"
+                    
+                line = f"{wkld:<30} | {alg:<40} | {ipc:<10.4f} | {speedup_str}"
+                output_lines.append(line)
+        output_lines.append("-" * 95)
+
+    # Calculate average speedup
+    output_lines.append("\nGeomean Speedup relative to baseline:")
+    for alg in configs:
+        if alg == args.baseline:
+            continue
+        if speedups[alg]:
+            avg_speedup = calculate_geomean(speedups[alg])
+            output_lines.append(f"{alg:<40}: {avg_speedup:.4f}x")
 
     # Output to console
     for line in output_lines:
