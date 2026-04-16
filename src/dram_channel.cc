@@ -531,29 +531,7 @@ DRAM_CHANNEL::update_read_write_priority()
     size_t read_occu = std::count_if(RQ.begin(), RQ.end(), [] (const auto& e) { return e.has_value(); });
     size_t write_occu = std::count_if(WQ.begin(), WQ.end(), [] (const auto& e) { return e.has_value(); });
 
-    bool baws_abort = false;
-    if (bard_wq_abort && write_mode && read_occu > 0)
-    {
-        size_t write_banks = 0;
-        std::vector<bool> seen_banks(num_bankgroups * num_banks, false);
-        for (const auto& w : WQ) {
-            if (w.has_value() && !w.value().scheduled) {
-                size_t b_idx = address_mapper.bank_idx(w.value().address);
-                if (!seen_banks[b_idx]) {
-                    seen_banks[b_idx] = true;
-                    write_banks++;
-                }
-            }
-        }
-        
-        // If pending writes are restricted to 2 or fewer banks, they lack parallelism.
-        // Waiting for them to drain fully will unnecessarily stall reads hitting idle banks.
-        if (write_banks > 0 && write_banks <= 2) {
-            baws_abort = true;
-        }
-    }
-
-    if (write_mode && ((read_occu > 0 && write_occu < low_watermark) || baws_abort))
+    if (write_mode && ((read_occu > 0 && write_occu < (wq_abort? low_watermark*2: low_watermark))))
     {
         write_mode = false; 
 
@@ -588,6 +566,7 @@ DRAM_CHANNEL::update_read_write_priority()
                    << "\tavg_wq_requests="    << sim_stats.wq_tot_requests          / cycles
                    << "\tavg_wq_banks="       << sim_stats.wq_tot_bank_parallelism  / cycles
                    << "\tavg_wq_bankgroups="  << sim_stats.wq_tot_bankgroup_parallelism / cycles
+                   << "\twq_abort=" << wq_abort
                    << "\n";
         }
 #endif
@@ -595,6 +574,27 @@ DRAM_CHANNEL::update_read_write_priority()
     else if (!write_mode && ((read_occu == 0 && write_occu > 0) || write_occu >= high_watermark))
     {
         write_mode = true;
+
+        wq_abort = false;
+        if (bard_wq_abort && write_mode && read_occu > 0)
+        {
+            size_t write_banks = 0;
+            std::vector<bool> seen_banks(num_bankgroups * num_banks, false);
+            for (const auto& w : WQ) {
+                if (w.has_value() && !w.value().scheduled) {
+                    size_t b_idx = address_mapper.bank_idx(w.value().address);
+                    if (!seen_banks[b_idx]) {
+                        seen_banks[b_idx] = true;
+                        write_banks++;
+                    }
+                }
+            }
+            
+            if ((float)write_banks/(float)write_occu < 0.66) {
+                std::cout << "blp=" << (float)write_banks/(float)write_occu << "\n";
+                wq_abort = true;
+            }
+        }
 
         writes_during_drain = 0;
         write_drain_start = current_time;

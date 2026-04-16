@@ -89,6 +89,7 @@ struct DRAM_CHANNEL final : public champsim::operable
     queue_type WQ;
 
     bool write_mode =false;
+    bool wq_abort=false;
 
     std::vector<BANK_DATA> banks{};
     std::deque<champsim::chrono::clock::time_point> faw{};
