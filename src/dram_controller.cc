@@ -19,13 +19,15 @@ MEMORY_CONTROLLER::MEMORY_CONTROLLER(champsim::chrono::picoseconds mc_period,
         std::string address_mapping_name,
         std::size_t rq_size,
         std::size_t wq_size,
+        std::size_t low_watermark,
+        std::size_t high_watermark,
         std::size_t _num_channels,
         std::size_t _num_bankgroups,
         std::size_t _num_banks,
         std::size_t _num_rows,
         std::size_t _num_columns,
         std::size_t llc_sets,
-        bool baws)
+        bool baws, bool bard_wq_abort)
     :champsim::operable(mc_period),
     address_mapper(address_mapping_name, _num_channels, _num_bankgroups, _num_banks, _num_rows, _num_columns, llc_sets),
     dram_timing(dram_type, mc_period),
@@ -37,7 +39,7 @@ MEMORY_CONTROLLER::MEMORY_CONTROLLER(champsim::chrono::picoseconds mc_period,
     queues(std::move(ul))
 {
     for (size_t i = 0; i < num_channels; i++)
-    channels.emplace_back(new DRAM_CHANNEL(mc_period, rq_size, wq_size, i, num_bankgroups, num_banks, num_rows, address_mapper, dram_timing, baws));
+    channels.emplace_back(new DRAM_CHANNEL(mc_period, rq_size, wq_size, low_watermark, high_watermark, i, num_bankgroups, num_banks, num_rows, address_mapper, dram_timing, baws, bard_wq_abort));
 }
 
 void

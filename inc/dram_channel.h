@@ -105,6 +105,7 @@ struct DRAM_CHANNEL final : public champsim::operable
 
     const size_t channel_id;
     const bool baws;
+    const bool bard_wq_abort;
 private:
     DRAM_ADDRESS_MAPPER address_mapper;
     DRAM_TIMING         dram_timing;
@@ -122,9 +123,9 @@ private:
     champsim::chrono::clock::time_point last_cas_command_time{};
 public:
     DRAM_CHANNEL(champsim::chrono::picoseconds mc_period,
-                std::size_t rq_size, std::size_t wq_size,
+                std::size_t rq_size, std::size_t wq_size, std::size_t low_watermark, std::size_t high_watermark,
                 std::size_t channel_id, std::size_t num_bankgroups, std::size_t num_banks, std::size_t num_rows,
-                const DRAM_ADDRESS_MAPPER&, const DRAM_TIMING&, bool baws);
+                const DRAM_ADDRESS_MAPPER&, const DRAM_TIMING&, bool baws, bool bard_wq_abort);
 
     cmd_output_type find_ready_request(void);
     long schedule_ready_request(void);

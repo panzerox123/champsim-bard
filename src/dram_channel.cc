@@ -21,30 +21,33 @@ DRAM_CHANNEL::DRAM_CHANNEL(
         champsim::chrono::picoseconds mc_period,
         std::size_t rq_size,
         std::size_t wq_size,
+        std::size_t _low_watermark,
+        std::size_t _high_watermark,
         std::size_t _channel_id,
         std::size_t _num_bankgroups,
         std::size_t _num_banks,
         std::size_t _num_rows,
         const DRAM_ADDRESS_MAPPER& am,
         const DRAM_TIMING& timing,
-        bool _baws)
+        bool _baws, bool _bard_wq_abort)
     :champsim::operable(mc_period),
     RQ(rq_size),
     WQ(wq_size),
     banks(_num_bankgroups*_num_banks, BANK_DATA{}),
-    low_watermark(wq_size/6),
-    high_watermark((5*wq_size)/6),
+    low_watermark(_low_watermark),
+    high_watermark(_high_watermark),
     num_bankgroups(_num_bankgroups),
     num_banks(_num_banks),
     num_rows(_num_rows),
     channel_id(_channel_id),
     baws(_baws),
+    bard_wq_abort(_bard_wq_abort),
     address_mapper(am),
     dram_timing(timing),
     writes_per_bank(_num_bankgroups*_num_banks, 0),
     writes_per_bankgroup(_num_bankgroups, 0)
 {
-    std::cout << "Channel" << channel_id << " BAWS Enabled: " << baws << "\n";
+    std::cout << "Channel" << channel_id << " BAWS Enabled: " << baws << " BARD_WQ_ABORT Enabled: " << bard_wq_abort << "\n";
     bank_scheduled_to.resize(num_bankgroups * num_banks, false);
 #if defined(DRAM_ENABLE_LOGGER)
     logger = std::ofstream("dram_channel." + std::to_string(channel_id) + ".log");
@@ -528,7 +531,29 @@ DRAM_CHANNEL::update_read_write_priority()
     size_t read_occu = std::count_if(RQ.begin(), RQ.end(), [] (const auto& e) { return e.has_value(); });
     size_t write_occu = std::count_if(WQ.begin(), WQ.end(), [] (const auto& e) { return e.has_value(); });
 
-    if (write_mode && (read_occu > 0 && write_occu < low_watermark))
+    bool baws_abort = false;
+    if (bard_wq_abort && write_mode && read_occu > 0)
+    {
+        size_t write_banks = 0;
+        std::vector<bool> seen_banks(num_bankgroups * num_banks, false);
+        for (const auto& w : WQ) {
+            if (w.has_value() && !w.value().scheduled) {
+                size_t b_idx = address_mapper.bank_idx(w.value().address);
+                if (!seen_banks[b_idx]) {
+                    seen_banks[b_idx] = true;
+                    write_banks++;
+                }
+            }
+        }
+        
+        // If pending writes are restricted to 2 or fewer banks, they lack parallelism.
+        // Waiting for them to drain fully will unnecessarily stall reads hitting idle banks.
+        if (write_banks > 0 && write_banks <= 2) {
+            baws_abort = true;
+        }
+    }
+
+    if (write_mode && ((read_occu > 0 && write_occu < low_watermark) || baws_abort))
     {
         write_mode = false; 
 
@@ -545,6 +570,7 @@ DRAM_CHANNEL::update_read_write_priority()
             sim_stats.tot_write_imbalance += *max_it - *min_it;
 
             sim_stats.tot_read_occu_post_drain += read_occu;
+            sim_stats.tot_write_occu_post_drain += write_occu;
             
             size_t banks_with_writes = std::count_if(writes_per_bank.begin(), writes_per_bank.end(), [] (auto x) { return x != 0; });
             sim_stats.tot_bank_parallelism += banks_with_writes;
@@ -575,6 +601,7 @@ DRAM_CHANNEL::update_read_write_priority()
         write_drain_started_with_no_read_occu = (read_occu == 0);
 
         sim_stats.tot_read_occu_pre_drain += read_occu;
+        sim_stats.tot_write_occu_pre_drain += write_occu;
 
         std::fill(writes_per_bank.begin(), writes_per_bank.end(), 0);
         std::fill(writes_per_bankgroup.begin(), writes_per_bankgroup.end(), 0);

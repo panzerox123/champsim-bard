@@ -41,6 +41,8 @@ struct dram_stats
 
     uint64_t tot_read_occu_pre_drain =0;
     uint64_t tot_read_occu_post_drain =0;
+    uint64_t tot_write_occu_pre_drain =0;
+    uint64_t tot_write_occu_post_drain =0;
 
     uint64_t tot_read_latency =0;
 
