@@ -320,7 +320,7 @@ class NormalizedConfiguration:
 
         pmem = util.chain(self.pmem, {
             'name': 'DRAM', 'frequency': 2400, 'channels': 2, 'ranks': 1, 'bankgroups': 8, 'banks': 4, 'rows': 65536, 'columns': 128,
-            'dram_type': '4800', 'address_mapping': 'zen', 'wq_size': 64, 'rq_size': 64, 'baws': False, 'bard_wq_abort': False
+            'dram_type': '4800', 'address_mapping': 'zen', 'wq_size': 64, 'rq_size': 64, 'baws': False, 'bard_wq_abort': False, 'gwrr': False
         })
         wq_size_val = int_or_prefixed_size(pmem.get('wq_size', 64))
         pmem = util.chain(pmem, {
